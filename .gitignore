@@ -1,2 +1,29 @@
-# phpstorm project files
-.idea
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Environment
+.env
+*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Dependencies
+vendor/
+
+# OS specific
+.DS_Store
+Thumbs.db
