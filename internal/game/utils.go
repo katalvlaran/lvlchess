@@ -1,0 +1,82 @@
+package game
+
+import (
+	"fmt"
+	"math/rand"
+	"time"
+
+	"telega_chess/internal/db"
+)
+
+// AssignRandomColors задаёт WhiteID и BlackID, если они ещё не были назначены.
+// Если already assigned (оба не nil), функция ничего не меняет.
+func AssignRandomColors(r *db.Room) {
+	// Если уже есть белые/чёрные, ничего не делаем.
+	if r.WhiteID != nil && r.BlackID != nil {
+		return
+	}
+
+	// Убедимся, что у нас есть player1 и player2
+	if r.Player2ID == nil {
+		// нет второго игрока — не будем назначать
+		return
+	}
+
+	// Инициализируем seed (можно один раз в main(), но если не инициализировано, сделаем локально)
+	rand.Seed(time.Now().UnixNano())
+
+	if rand.Intn(2) == 0 {
+		// player1 -> white, player2 -> black
+		r.WhiteID = &r.Player1ID
+		r.BlackID = r.Player2ID
+	} else {
+		// player2 -> white, player1 -> black
+		r.WhiteID = r.Player2ID
+		black := r.Player1ID
+		r.BlackID = &black
+	}
+}
+
+func MakeGameStartedMessage(r db.Room) string {
+	// Возьмём удобные "displayName" для player1 и player2
+	p1Name := getDisplayName(r.Player1Username, "Player1")
+	var p2Name string
+	if r.Player2Username == nil {
+		p2Name = "Player2"
+	} else {
+		p2Name = getDisplayName(r.Player2Username, "Player2")
+	}
+
+	// Кто белые, кто чёрные?
+	var whiteName, blackName string
+
+	if r.WhiteID != nil && *r.WhiteID == r.Player1ID {
+		whiteName = p1Name
+		blackName = p2Name
+	} else if r.WhiteID != nil && r.Player2ID != nil && *r.WhiteID == *r.Player2ID {
+		whiteName = p2Name
+		blackName = p1Name
+	} else {
+		// На случай, если не назначены
+		whiteName = p1Name + "?"
+		blackName = p2Name + "?"
+	}
+
+	// Соберём текст
+	return fmt.Sprintf(
+		"Игра началась!\n%s (белые ♙) vs %s (чёрные ♟)\n\nНачальная позиция:",
+		whiteName, blackName,
+	)
+}
+
+func getDisplayName(usernamePtr *string, fallback string) string {
+	if usernamePtr == nil || *usernamePtr == "" {
+		return fallback
+	}
+	username := *usernamePtr
+	// Проверим, есть ли уже "@" в начале
+	if username[0] != '@' {
+		username = "@" + username
+	}
+	return username
+}

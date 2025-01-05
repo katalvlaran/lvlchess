@@ -50,13 +50,5 @@ func main() {
 				bot.Send(msg)
 			}
 		}
-
-		//if update.Message != nil && update.Message.IsCommand() {
-		//	telegram.HandleCommands(bot, update)
-		//} else if update.Message != nil {
-		//	// Любые текстовые сообщения
-		//	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Используйте /start для списка команд.")
-		//	bot.Send(msg)
-		//}
 	}
 }

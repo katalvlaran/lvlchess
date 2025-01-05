@@ -111,6 +111,34 @@ func GetRoomByID(roomID string) (Room, error) {
 	return r, nil
 }
 
+// GetRoomByID достаём все поля, включая board_state, white_id, black_id
+func GetRoomByChatID(chatID string) (Room, error) {
+	var r Room
+	sql := `SELECT * FROM rooms WHERE chat_id = $1;`
+	row := Pool.QueryRow(context.Background(), sql, chatID)
+	err := row.Scan(
+		&r.RoomID,
+		&r.Player1ID,
+		&r.Player2ID,
+		&r.Status,
+		&r.BoardState,
+		&r.WhiteID,
+		&r.BlackID,
+		&r.ChatID,
+		&r.Player1Username,
+		&r.Player2Username,
+		&r.CreatedAt,
+		&r.UpdatedAt,
+	)
+	if err != nil {
+		return Room{}, fmt.Errorf("GetRoomByChatID: %v", err)
+	}
+	if r.RoomID == "" {
+		return Room{}, errors.New("комната не найдена")
+	}
+	return r, nil
+}
+
 // DeleteRoom удаляет запись из таблицы rooms
 func DeleteRoom(roomID string) error {
 	sql := `DELETE FROM rooms WHERE room_id = $1;`

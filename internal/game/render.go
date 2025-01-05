@@ -69,7 +69,7 @@ func RenderBoardCustom(fen string) (string, error) {
 			sq := chess.NewSquare(file, rank)
 			piece := board.Piece(sq)
 			if piece == chess.NoPiece {
-				sb.WriteString(" ▢ ")
+				sb.WriteString(" ▫ ")
 			} else {
 				sb.WriteString(piece.String() + "  ")
 			}

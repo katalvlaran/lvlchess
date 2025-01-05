@@ -130,8 +130,6 @@ func handleJoinRoom(bot *tgbotapi.BotAPI, update tgbotapi.Update, roomID string)
 		whiteUser, blackUser, asciiBoard)
 	bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, text))
 
-	text = fmt.Sprintf("Начальная позиция:\n%s", asciiBoard)
-	bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, text))
 	// По желанию, оповещаем и первого игрока (через player1_id).
 	// Можно хранить chat_id каждого игрока, если нужно отдельно рассылать.
 	// Или просто писать в той же комнате, если игроки используют общий групповой чат.
@@ -207,42 +205,70 @@ func handleCreateRoomCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 }
 
 func handleSetRoomCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	args := update.Message.CommandArguments()
-	// args = "546e81dc-5aff-463a-9681-3e41627b8df2"
+	args := strings.TrimSpace(update.Message.CommandArguments())
+	if args == "" {
+		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
+			"Пожалуйста, укажите room_id, например:\n/setroom 546e81dc-5aff-463a-9681-3e41627b8df2"))
+		return
+	}
 
-	// Смотрим, есть ли такая roomID в БД
 	room, err := db.GetRoomByID(args)
 	if err != nil {
 		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
-			"Комната не найдена. Убедитесь, что ввели корректный room_id."))
+			"Комната не найдена. Проверьте идентификатор."))
 		return
 	}
 
-	// Сохраняем chat.ID
+	// Привяжем chat.ID
 	chatID := update.Message.Chat.ID
 	room.ChatID = &chatID
-	err = db.UpdateRoom(room)
-	if err != nil {
-		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
-			"Не удалось обновить комнату: "+err.Error()))
+	if err := db.UpdateRoom(room); err != nil {
+		bot.Send(tgbotapi.NewMessage(chatID, "Не удалось сохранить chatID в БД: "+err.Error()))
 		return
 	}
 
-	// Переименуем группу окончательно
+	// Переименуем на основе player1Username, если хотим
 	if room.Player1Username != nil {
-		newTitle := fmt.Sprintf("tChess:@%s", *room.Player1Username)
-		renameConfig := tgbotapi.SetChatTitleConfig{
-			ChatID: chatID,
-			Title:  newTitle,
-		}
-		if _, err := bot.Request(renameConfig); err != nil {
-			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
-				"Не смог переименовать группу. Дайте права 'Change group info'!"))
-		}
+		tryRenameGroup(bot, chatID, fmt.Sprintf("tChess:@%s", *room.Player1Username))
 	}
 
-	bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
-		fmt.Sprintf("Теперь эта группа связана с комнатой %s!", room.RoomID)))
+	// Сообщим "Готово!"
+	bot.Send(tgbotapi.NewMessage(chatID,
+		fmt.Sprintf("Группа успешно привязана к комнате %s!", room.RoomID)))
+
+	// Теперь проверим, есть ли player2ID
+	if room.Player2ID == nil {
+		// Предлагаем пригласить второго
+		// Создадим invite-link
+		linkCfg := tgbotapi.ChatInviteLinkConfig{
+			ChatConfig: tgbotapi.ChatConfig{ChatID: chatID},
+			// Можно ExpireDate, MemberLimit...
+		}
+		inviteLink, err := bot.GetInviteLink(linkCfg)
+		if err != nil {
+			bot.Send(tgbotapi.NewMessage(chatID, "Ошибка создания ссылки-приглашения: "+err.Error()))
+			return
+		}
+
+		// Отправляем
+		text := fmt.Sprintf(
+			"Сейчас в комнате только вы. Отправьте второму игроку эту ссылку:\n%s",
+			inviteLink,
+		)
+		bot.Send(tgbotapi.NewMessage(chatID, text))
+	} else {
+		// room.Player2ID уже не nil => у нас есть второй игрок!
+		// Значит "Игра началась!"
+		// Переименуем группу?
+		if room.Player2Username != nil {
+			newTitle := fmt.Sprintf("tChess:@%s_⚔️_@%s",
+				*room.Player1Username, *room.Player2Username)
+			tryRenameGroup(bot, chatID, newTitle)
+		}
+
+		bot.Send(tgbotapi.NewMessage(chatID, "Игра началась!"))
+		// Тут можно отобразить ASCII-доску и т.п.
+	}
 }
 
 func handleGameListCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
@@ -266,9 +292,11 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	switch {
 	case data == "manage_room":
 		handleManageRoomMenu(bot, query)
-
 	case data == "continue_setup":
 		handleContinueSetup(bot, query)
+	case strings.HasPrefix(data, "retry_rename:"):
+		newTitle := data[len("retry_rename:"):]
+		handleRetryRename(bot, query, newTitle)
 	case strings.HasPrefix(data, "create_chat_"):
 		// пользователь нажал "Создать и перейти в Чат"
 		roomID := data[len("create_chat_"):]
@@ -328,12 +356,56 @@ func handleManageRoomMenu(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 }
 
 func handleContinueSetup(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
-	// Говорим пользователю: "Введите /setroom <room_id> в этом чате,
-	// чтобы связать комнату с группой."
+	chatID := query.Message.Chat.ID
 
-	text := `Чтобы завершить настройку, введите команду:
-/setroom <room_id>
-(например, /setroom 546e81dc-5aff-463a-9681-3e41627b8df2)
-Это свяжет текущий групповой чат с вашей комнатой.`
-	bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, text))
+	// Проверим, есть ли уже room, привязанная к этому chatID
+	room, err := db.GetRoomByChatID(string(chatID))
+	if err != nil {
+		// Нет привязки
+		text := `
+Пока к этой группе не привязана никакая комната.
+Введите команду /setroom <room_id> для привязки:
+Например: /setroom 546e81dc-5aff-463a-9681-3e41627b8df2
+`
+		bot.Send(tgbotapi.NewMessage(chatID, text))
+		return
+	}
+
+	// Если есть, проверим, есть ли второй игрок
+	if room.Player2ID == nil {
+		// Предлагаем сгенерировать invite-link
+		linkCfg := tgbotapi.ChatInviteLinkConfig{
+			ChatConfig: tgbotapi.ChatConfig{ChatID: chatID},
+		}
+		link, err := bot.GetInviteLink(linkCfg)
+		if err != nil {
+			bot.Send(tgbotapi.NewMessage(chatID, "Ошибка при создании invite-link: "+err.Error()))
+			return
+		}
+
+		text := fmt.Sprintf("Комната уже привязана к room_id=%s, но пока нет второго игрока.\n"+
+			"Пригласите его ссылкой:\n%s", room.RoomID, link)
+		bot.Send(tgbotapi.NewMessage(chatID, text))
+	} else {
+		// Есть 2 игрока => "Игра началась!" (или уже идёт)
+		newTitle := makeFinalTitle(room)
+		tryRenameGroup(bot, chatID, newTitle)
+
+		msgText := game.MakeGameStartedMessage(room)
+		bot.Send(tgbotapi.NewMessage(chatID, msgText))
+
+		// ASCII доска (если надо)
+		fen := ""
+		if room.BoardState != nil {
+			fen = *room.BoardState
+		}
+		ascii, _ := game.RenderBoardCustom(fen)
+		bot.Send(tgbotapi.NewMessage(chatID, ascii))
+	}
+}
+
+func handleRetryRename(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, newTitle string) {
+	// Просто заново вызываем tryRenameGroup
+	// chatID = query.Message.Chat.ID
+	tryRenameGroup(bot, query.Message.Chat.ID, newTitle)
 }
