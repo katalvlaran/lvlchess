@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
@@ -19,20 +20,30 @@ const (
 
 // Room модель для таблицы rooms
 type Room struct {
-	RoomID string
-	//Player1ID  int64
-	//Player2ID  *int64  // null, если второй игрок не присоединился
-	Player1    *User
-	Player2    *User   // null, если второй игрок не присоединился
-	Status     string  // waiting/playing/finished
-	BoardState *string // null, если ещё не зафиксировали доску
-	WhiteID    *int64
-	BlackID    *int64
-	ChatID     *int64 // null, если комнату-группу ещё не создали
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	RoomID     string
+	Player1    *User     `json:"player_1"`
+	Player2    *User     `json:"player_2"`    // null, если второй игрок не присоединился
+	Status     string    `json:"status"`      // waiting/playing/finished
+	BoardState *string   `json:"board_state"` // null, если ещё не зафиксировали доску
+	WhiteID    *int64    `json:"white_id"`
+	BlackID    *int64    `json:"black_id"`
+	ChatID     *int64    `json:"chat_id"` // null, если комнату-группу ещё не создали
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+func (u *Room) Validate() error {
+	return validation.ValidateStruct(&u,
+		validation.Field(&u.RoomID, validation.Required),
+		validation.Field(&u.Player1, validation.Required),
+		validation.Field(&u.Player2, validation.NilOrNotEmpty),
+		validation.Field(&u.Status, validation.Required, validation.In(RoomStatusWaiting, RoomStatusPlaying, RoomStatusFinished)),
+		validation.Field(&u.BoardState, validation.NilOrNotEmpty),
+		//validation.Field(&u.WhiteID, validation.Required),
+		//validation.Field(&u.BlackID, validation.Required),
+		//validation.Field(&u.ChatID, validation.Required),
+	)
+}
 func CreateRoom(player1ID int64) (*Room, error) {
 	p1, err := GetUserByID(player1ID)
 	utils.Logger.Error("GetUserByID:", zap.Error(err))
@@ -43,7 +54,11 @@ func CreateRoom(player1ID int64) (*Room, error) {
 	r := Room{
 		RoomID:  uuid.NewString(),
 		Player1: p1,
-		Status:  "waiting",
+		Status:  RoomStatusWaiting,
+	}
+
+	if err = r.Validate(); err != nil {
+		return nil, err
 	}
 	sql := `INSERT INTO rooms (room_id, player1_id, status)
 			VALUES ($1, $2, $3)`
@@ -135,7 +150,11 @@ func UpdateRoom(r *Room) error {
 	if r.Player2 != nil {
 		p2ID = &r.Player2.ID
 	}
-	utils.Logger.Info("UpdateRoom", zap.Any("room:", &r), zap.Any("p2ID:", p2ID))
+
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	utils.Logger.Debug("UpdateRoom", zap.Any("room:", &r), zap.Any("p2ID:", p2ID))
 	sql := `UPDATE rooms
 			SET player2_id = $1,
 			    status = $2,

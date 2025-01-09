@@ -13,20 +13,20 @@ import (
 const UnregisteredPrivateChat = 0
 
 type User struct {
-	ID         int64 // Telegram user ID
-	Username   string
-	FirstName  string
-	ChatID     int64
-	Rating     int
-	Wins       int
-	TotalGames int
+	ID         int64  `json:"id"` // Telegram user ID
+	Username   string `json:"username"`
+	FirstName  string `json:"firstName"`
+	ChatID     int64  `json:"chatID"`
+	Rating     int    `json:"rating"`
+	Wins       int    `json:"wins"`
+	TotalGames int    `json:"totalGames"`
 }
 
 func (u *User) Validate() error {
 	return validation.ValidateStruct(&u,
 		validation.Field(&u.ID, validation.Required),
 		validation.Field(&u.Username, validation.Required),
-		//validation.Field(&u.FirstName, validation.Required),
+		validation.Field(&u.FirstName, validation.Required),
 		validation.Field(&u.ChatID, validation.Required),
 		//validation.Field(&u.Rating, validation.Required),
 		//validation.Field(&u.Wins, validation.Required),
@@ -36,7 +36,11 @@ func (u *User) Validate() error {
 
 // CreateOrUpdateUser - сохраняем/обновляем юзера
 func CreateOrUpdateUser(u *User) error {
-	utils.Logger.Info("CreateOrUpdateUser:", zap.Any("user", u))
+	if err := u.Validate(); err != nil {
+		return err
+	}
+
+	utils.Logger.Debug("CreateOrUpdateUser:", zap.Any("user", u))
 	sql := `
 	INSERT INTO users (id, user_name, first_name, chat_id, rating, wins, total_games)
 	VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -76,5 +80,3 @@ func GetUserByID(id int64) (*User, error) {
 	}
 	return &u, nil
 }
-
-// Пример расширений: UpdateWins, UpdateRating и т.д.

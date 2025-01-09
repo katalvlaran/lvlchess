@@ -2,33 +2,44 @@ package db
 
 import (
 	"context"
-	"log"
+	"fmt"
+
+	"telega_chess/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+
+	"telega_chess/internal/utils"
 )
 
 var Pool *pgxpool.Pool
 
 // InitDB инициализирует пул соединений и сохраняет в глобальную переменную Pool.
 func InitDB() {
-	dsn := "postgres://katalvlaran:kj916t4rf@localhost:5432/telega_chess"
-	config, err := pgxpool.ParseConfig(dsn)
+	dsn := fmt.Sprintf(
+		"postgres://%s:%s@%s%s/%s",
+		config.Cfg.PgUser,
+		config.Cfg.PgPass,
+		config.Cfg.PgHost,
+		config.Cfg.PgPort,
+		config.Cfg.PgDbName)
+	dbCfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		log.Fatalf("Ошибка pgxpool.ParseConfig: %v", err)
+		utils.Logger.Error("😖 Ошибка pgxpool.ParseConfig: 💀", zap.Error(err))
 	}
 
-	pool, err := pgxpool.New(context.Background(), config.ConnString())
+	pool, err := pgxpool.New(context.Background(), dbCfg.ConnString())
 	if err != nil {
-		log.Fatalf("Ошибка подключения к БД: %v", err)
+		utils.Logger.Error("😖 Ошибка подключения к БД: 💀", zap.Error(err))
 	}
 
 	// Проверим соединение
 	err = pool.Ping(context.Background())
 	if err != nil {
-		log.Fatalf("БД недоступна: %v", err)
+		utils.Logger.Error("😖 БД недоступна 🤷", zap.Error(err))
 	}
 
-	log.Println("Успешное подключение к PostgreSQL")
+	utils.Logger.Info("🦾 Успешное подключение к PostgreSQL 🗄", zap.Error(err))
 	Pool = pool
 
 	// Выполним миграцию (упрощённый вариант):
@@ -50,7 +61,7 @@ func initSchema() {
 	`
 	_, err := Pool.Exec(context.Background(), schemaUsers)
 	if err != nil {
-		log.Fatalf("Ошибка создания таблицы users: %v", err)
+		utils.Logger.Error("😖 Ошибка создания таблицы users: 💀", zap.Error(err))
 	}
 
 	schemaRooms := `
@@ -71,6 +82,6 @@ func initSchema() {
 	`
 	_, err = Pool.Exec(context.Background(), schemaRooms)
 	if err != nil {
-		log.Fatalf("Ошибка создания таблицы rooms: %v", err)
+		utils.Logger.Error("😖 Ошибка создания таблицы rooms: 💀", zap.Error(err))
 	}
 }

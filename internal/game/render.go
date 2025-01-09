@@ -10,40 +10,19 @@ import (
 const WhiteCell = "□"
 const BlackCell = "■"
 
-// MakeNewChessGame возвращает FEN начальной позиции
-func MakeNewChessGame() string {
-	game := chess.NewGame()
-	return game.FEN() // начальная FEN: "rn...kq..." etc.
-}
-
-// RenderBoardFromFEN восстанавливает Game из FEN и возвращает ASCII-рисунок
-func RenderBoardFromFEN(fen string) (string, error) {
-	FEN, err := chess.FEN(fen)
-	if err != nil {
-		return "", fmt.Errorf("FEN", err)
-	}
-	game := chess.NewGame(FEN)
-	if game == nil {
-		return "", fmt.Errorf("ошибка восстановления игры из FEN")
-	}
-
-	// У notnil/chess уже есть ASCII-отрисовка через Board()
-	ascii := fmt.Sprint(game.Position().Board())
-	return ascii, nil
-}
-
 /*
 Ожидаемый результат генерации
 ```
 □ | a  b  c  d  e  f  g  h | ■
-8 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖ | 8
-7 | ♙  ♙  ♙  ♙  ♙  ♙  ♙  ♙ | 7
-3 | □  ■  □  ■  □  ■  □  ■ | 3
-4 | ■  □  ■  □  ■  □  ■  □ | 4
-5 | □  ■  □  ■  □  ■  □  ■ | 5
-6 | ■  □  ■  □  ■  □  ■  □ | 6
-2 | ♟  ♟  ♟  ♟  ♟  ♟  ♟  ♟ | 2
-1 | ♜  ♞  ♝  ♛  ♚  ♝  ♞  ♜ | 1
+--+------------------------+--
+8 | ♜  ♞  ♝  ♛  ♚  ♝  ♞  ♜ | 8
+7 | ♟  ♟  ♟  ♟  ♟  ♟  ♟  ♟ | 7
+6 | □  ■  □  ■  □  ■  □  ■ | 6
+5 | ■  □  ■  □  ■  □  ■  □ | 5
+4 | □  ■  □  ■  □  ■  □  ■ | 4
+3 | ■  □  ■  □  ■  □  ■  □ | 3
+2 | ♙  ♙  ♙  ♙  ♙  ♙  ♙  ♙ | 2
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖ | 1
 --+------------------------+--
 ■ | a  b  c  d  e  f  g  h | □
 ```
@@ -110,7 +89,6 @@ func RenderBoardCustom(fen string) (string, error) {
 
 	// "разделитель"
 	sb.WriteString("--+------------------------+--\n")
-
 	// Нижняя "шапка"
 	sb.WriteString(fmt.Sprintf("%s | a  b  c  d  e  f  g  h | %s\n", BlackCell, WhiteCell))
 	sb.WriteString("```") // конец форматирования
@@ -148,6 +126,6 @@ func pieceToStr(p chess.Piece) string {
 		return " ♚ "
 	default:
 		// fallback (если что-то неизвестное):
-		return p.String() + "  "
+		return " " + p.String() + " "
 	}
 }

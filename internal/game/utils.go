@@ -70,7 +70,7 @@ func MakeGameStartedMessage(r *db.Room) string {
 }
 
 func getDisplayName(usernamePtr string, fallback string) string {
-	if usernamePtr == "" || usernamePtr == "" {
+	if usernamePtr == "" {
 		return fallback
 	}
 	username := usernamePtr

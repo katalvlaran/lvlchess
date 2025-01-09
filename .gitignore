@@ -1,12 +1,3 @@
-# Binaries
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
-*.out
-
 # Environment
 .env
 *.local
@@ -21,8 +12,8 @@
 *.log
 logs/
 
-# Dependencies
-vendor/
+# self tests
+test/
 
 # OS specific
 .DS_Store
