@@ -17,7 +17,7 @@ func HandleNewChatMembers(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	newMembers := update.Message.NewChatMembers
 
 	// Получим room, если он есть:
-	room, err := db.GetRoomByChatID(string(chat.ID)) // Нужно написать метод в db, типа GetRoomByChatID
+	room, err := db.GetRoomByChatID(chat.ID) // Нужно написать метод в db, типа GetRoomByChatID
 	var haveRoom bool
 	if err == nil && room.RoomID != "" {
 		haveRoom = true
@@ -26,6 +26,7 @@ func HandleNewChatMembers(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	for _, member := range newMembers {
 		if member.IsBot && member.ID == bot.Self.ID {
 			// Бот добавлен в новую группу → пытаемся переименовать, если нет прав, выдаём "Повторить..."
+			//tryRenameGroup(bot, chat.ID, fmt.Sprintf("tChess:%d", room.Player1.Username))
 			tryRenameGroup(bot, chat.ID, fmt.Sprintf("tChess:%d", time.Now().Unix()))
 
 			// Покажем кнопку "Управление комнатой"
@@ -42,16 +43,21 @@ func HandleNewChatMembers(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			// Возможно, это второй игрок (или ещё кто-то).
 			// Если у нас уже есть "привязанная" комната (haveRoom == true),
 			// и room.Player2ID == nil => назначаем его вторым игроком
-			if haveRoom && room.Player2ID == nil {
-				user2ID := int64(member.ID)
-				// Сохраним username (или fallback)
-				user2Name := member.UserName
-				if user2Name == "" {
-					user2Name = member.FirstName
+			if haveRoom && room.Player2 == nil {
+				p2 := &db.User{
+					ID:        member.ID,
+					Username:  member.UserName,
+					FirstName: member.FirstName,
+					ChatID:    db.UnregisteredPrivateChat,
 				}
-				room.Player2ID = &user2ID
-				room.Player2Username = &user2Name
-				game.AssignRandomColors(&room) // назначили белые/чёрные, если ещё не назначены
+
+				if err = db.CreateOrUpdateUser(p2); err != nil {
+					bot.Send(tgbotapi.NewMessage(chat.ID, "Ошибка создания второго игрока: "+err.Error()))
+					return
+				}
+
+				room.Player2 = p2
+				game.AssignRandomColors(room) // назначили белые/чёрные, если ещё не назначены
 
 				room.Status = "playing"
 				if err := db.UpdateRoom(room); err != nil {
@@ -59,24 +65,12 @@ func HandleNewChatMembers(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 					return
 				}
 
-				msgText := game.MakeGameStartedMessage(room)
-				bot.Send(tgbotapi.NewMessage(chat.ID, msgText))
-
 				// Переименуем в "tChess:@user1_⚔️_@user2"
 				newTitle := makeFinalTitle(room)
 				tryRenameGroup(bot, chat.ID, newTitle)
 
-				// Сообщим: "Игра началась!"
-				text := game.MakeGameStartedMessage(room)
-				bot.Send(tgbotapi.NewMessage(chat.ID, text))
-
-				// ASCII-доска
-				fen := ""
-				if room.BoardState != nil {
-					fen = *room.BoardState
-				}
-				asciiBoard, _ := game.RenderBoardCustom(fen) // или RenderBoardFromFEN
-				bot.Send(tgbotapi.NewMessage(chat.ID, asciiBoard))
+				notifyGameStarted(bot, room)
+				break
 			}
 		}
 	}
@@ -108,12 +102,12 @@ func tryRenameGroup(bot *tgbotapi.BotAPI, chatID int64, newTitle string) {
 	}
 }
 
-func makeFinalTitle(r db.Room) string {
-	if r.Player1Username == nil {
+func makeFinalTitle(r *db.Room) string {
+	if r.Player1.Username == "" {
 		return "tChess:????"
 	}
-	if r.Player2Username == nil {
-		return fmt.Sprintf("tChess:@%s_⚔️_??", *r.Player1Username)
+	if r.Player2.Username == "" {
+		return fmt.Sprintf("tChess:@%s_⚔️_??", r.Player1.Username)
 	}
-	return fmt.Sprintf("tChess:@%s_⚔️_@%s", *r.Player1Username, *r.Player2Username)
+	return fmt.Sprintf("tChess:@%s_⚔️_@%s", r.Player1.Username, r.Player2.Username)
 }

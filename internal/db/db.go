@@ -14,7 +14,7 @@ func InitDB() {
 	dsn := "postgres://katalvlaran:kj916t4rf@localhost:5432/telega_chess"
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		log.Fatalf("Ошибка парсинга DSN: %v", err)
+		log.Fatalf("Ошибка pgxpool.ParseConfig: %v", err)
 	}
 
 	pool, err := pgxpool.New(context.Background(), config.ConnString())
@@ -31,23 +31,45 @@ func InitDB() {
 	log.Println("Успешное подключение к PostgreSQL")
 	Pool = pool
 
-	// Дополнительно: создать таблицу, если не создана
-	createRoomsTable()
+	// Выполним миграцию (упрощённый вариант):
+	initSchema()
 }
 
-// createRoomsTable - пример (упрощённо, можно вынести в миграции)
-func createRoomsTable() {
-	sql := `
+// initSchema - создаём таблицы, если не созданы
+func initSchema() {
+	schemaUsers := `
+	CREATE TABLE IF NOT EXISTS users (
+		id        BIGINT UNIQUE,
+		user_name  VARCHAR(255),
+		first_name VARCHAR(255),
+		chat_id   BIGINT DEFAULT(0),   -- 0 если ещё не знаем
+		rating    INT DEFAULT 1000,
+		wins      INT DEFAULT 0,
+		total_games INT DEFAULT 0
+	);
+	`
+	_, err := Pool.Exec(context.Background(), schemaUsers)
+	if err != nil {
+		log.Fatalf("Ошибка создания таблицы users: %v", err)
+	}
+
+	schemaRooms := `
 	CREATE TABLE IF NOT EXISTS rooms (
 		room_id    VARCHAR(36) PRIMARY KEY,
 		player1_id BIGINT NOT NULL,
 		player2_id BIGINT,
-		status     VARCHAR(20) NOT NULL,
+		status     VARCHAR(20) NOT NULL DEFAULT('waiting'), -- waiting/playing/finished
+		board_state TEXT,
+		white_id   BIGINT,
+		black_id   BIGINT,
+		chat_id    BIGINT, -- для группового чата
 		created_at TIMESTAMP DEFAULT NOW(),
-		updated_at TIMESTAMP DEFAULT NOW()
+		updated_at TIMESTAMP DEFAULT NOW(),
+	    CONSTRAINT fk_p1 FOREIGN KEY(player1_id) REFERENCES users(id),
+	    CONSTRAINT fk_p2 FOREIGN KEY(player2_id) REFERENCES users(id)
 	);
 	`
-	_, err := Pool.Exec(context.Background(), sql)
+	_, err = Pool.Exec(context.Background(), schemaRooms)
 	if err != nil {
 		log.Fatalf("Ошибка создания таблицы rooms: %v", err)
 	}

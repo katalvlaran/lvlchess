@@ -17,7 +17,7 @@ func AssignRandomColors(r *db.Room) {
 	}
 
 	// Убедимся, что у нас есть player1 и player2
-	if r.Player2ID == nil {
+	if r.Player2 == nil {
 		// нет второго игрока — не будем назначать
 		return
 	}
@@ -27,33 +27,33 @@ func AssignRandomColors(r *db.Room) {
 
 	if rand.Intn(2) == 0 {
 		// player1 -> white, player2 -> black
-		r.WhiteID = &r.Player1ID
-		r.BlackID = r.Player2ID
+		r.WhiteID = &r.Player1.ID
+		r.BlackID = &r.Player2.ID
 	} else {
 		// player2 -> white, player1 -> black
-		r.WhiteID = r.Player2ID
-		black := r.Player1ID
-		r.BlackID = &black
+		r.WhiteID = &r.Player2.ID
+		black := &r.Player1.ID
+		r.BlackID = black
 	}
 }
 
-func MakeGameStartedMessage(r db.Room) string {
+func MakeGameStartedMessage(r *db.Room) string {
 	// Возьмём удобные "displayName" для player1 и player2
-	p1Name := getDisplayName(r.Player1Username, "Player1")
+	p1Name := getDisplayName(r.Player1.Username, "Player1")
 	var p2Name string
-	if r.Player2Username == nil {
+	if r.Player2.Username == "" {
 		p2Name = "Player2"
 	} else {
-		p2Name = getDisplayName(r.Player2Username, "Player2")
+		p2Name = getDisplayName(r.Player2.Username, "Player2")
 	}
 
 	// Кто белые, кто чёрные?
 	var whiteName, blackName string
 
-	if r.WhiteID != nil && *r.WhiteID == r.Player1ID {
+	if r.WhiteID != nil && *r.WhiteID == r.Player1.ID {
 		whiteName = p1Name
 		blackName = p2Name
-	} else if r.WhiteID != nil && r.Player2ID != nil && *r.WhiteID == *r.Player2ID {
+	} else if r.WhiteID != nil && r.Player2 != nil && *r.WhiteID == r.Player2.ID {
 		whiteName = p2Name
 		blackName = p1Name
 	} else {
@@ -69,11 +69,11 @@ func MakeGameStartedMessage(r db.Room) string {
 	)
 }
 
-func getDisplayName(usernamePtr *string, fallback string) string {
-	if usernamePtr == nil || *usernamePtr == "" {
+func getDisplayName(usernamePtr string, fallback string) string {
+	if usernamePtr == "" || usernamePtr == "" {
 		return fallback
 	}
-	username := *usernamePtr
+	username := usernamePtr
 	// Проверим, есть ли уже "@" в начале
 	if username[0] != '@' {
 		username = "@" + username
