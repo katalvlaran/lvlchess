@@ -25,21 +25,21 @@ func InitDB() {
 		config.Cfg.PgDbName)
 	dbCfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		utils.Logger.Error("😖 Ошибка pgxpool.ParseConfig: 💀", zap.Error(err))
+		utils.Logger.Error("😖 Ошибка pgxpool.ParseConfig: 💀"+err.Error(), zap.Error(err))
 	}
 
 	pool, err := pgxpool.New(context.Background(), dbCfg.ConnString())
 	if err != nil {
-		utils.Logger.Error("😖 Ошибка подключения к БД: 💀", zap.Error(err))
+		utils.Logger.Error("😖 Ошибка подключения к БД: 💀"+err.Error(), zap.Error(err))
 	}
 
 	// Проверим соединение
 	err = pool.Ping(context.Background())
 	if err != nil {
-		utils.Logger.Error("😖 БД недоступна 🤷", zap.Error(err))
+		utils.Logger.Error("😖 БД недоступна 🤷"+err.Error(), zap.Error(err))
 	}
 
-	utils.Logger.Info("🦾 Успешное подключение к PostgreSQL 🗄", zap.Error(err))
+	utils.Logger.Info("🦾 Успешное подключение к PostgreSQL 🗄")
 	Pool = pool
 
 	// Выполним миграцию (упрощённый вариант):
@@ -54,34 +54,39 @@ func initSchema() {
 		user_name  VARCHAR(255),
 		first_name VARCHAR(255),
 		chat_id   BIGINT DEFAULT(0),   -- 0 если ещё не знаем
+	    current_room VARCHAR(36),
 		rating    INT DEFAULT 1000,
 		wins      INT DEFAULT 0,
-		total_games INT DEFAULT 0
+		total_games INT DEFAULT 0,
+	    CONSTRAINT fk_curr_room FOREIGN KEY(current_room) REFERENCES rooms(id),
 	);
 	`
 	_, err := Pool.Exec(context.Background(), schemaUsers)
 	if err != nil {
-		utils.Logger.Error("😖 Ошибка создания таблицы users: 💀", zap.Error(err))
+		utils.Logger.Error("😖 Ошибка создания таблицы users: 💀"+err.Error(), zap.Error(err))
 	}
 
 	schemaRooms := `
 	CREATE TABLE IF NOT EXISTS rooms (
-		room_id    VARCHAR(36) PRIMARY KEY,
-		player1_id BIGINT NOT NULL,
-		player2_id BIGINT,
-		status     VARCHAR(20) NOT NULL DEFAULT('waiting'), -- waiting/playing/finished
-		board_state TEXT,
-		white_id   BIGINT,
-		black_id   BIGINT,
-		chat_id    BIGINT, -- для группового чата
-		created_at TIMESTAMP DEFAULT NOW(),
-		updated_at TIMESTAMP DEFAULT NOW(),
+		room_id       VARCHAR(36) PRIMARY KEY,
+	    room_title	  TEXT,
+		player1_id    BIGINT NOT NULL,
+		player2_id    BIGINT,
+		status        VARCHAR(20) NOT NULL DEFAULT('waiting'), -- waiting/playing/finished
+		board_state   TEXT,
+	    is_white_turn BOOLEAN NOT NULL DEFAULT true,
+		white_id      BIGINT,
+		black_id      BIGINT NULL,
+		chat_id       BIGINT, -- для группового чата
+		created_at    TIMESTAMP DEFAULT NOW(),
+		updated_at    TIMESTAMP DEFAULT NOW(),
 	    CONSTRAINT fk_p1 FOREIGN KEY(player1_id) REFERENCES users(id),
-	    CONSTRAINT fk_p2 FOREIGN KEY(player2_id) REFERENCES users(id)
+	    CONSTRAINT fk_p2 FOREIGN KEY(player2_id) REFERENCES users(id),
+	    CONSTRAINT players_pair UNIQUE (player1_id, player2_id);
 	);
 	`
 	_, err = Pool.Exec(context.Background(), schemaRooms)
 	if err != nil {
-		utils.Logger.Error("😖 Ошибка создания таблицы rooms: 💀", zap.Error(err))
+		utils.Logger.Error("😖 Ошибка создания таблицы rooms: 💀"+err.Error(), zap.Error(err))
 	}
 }

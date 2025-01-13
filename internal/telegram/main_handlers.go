@@ -13,12 +13,6 @@ import (
 	"go.uber.org/zap"
 )
 
-/*	main_handlers.go
-	HandleUpdate
-	handleMessage
-	handleCallback
-	handleNewChatMembers */
-
 // HandleUpdate - универсальная точка входа
 func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	switch {
@@ -67,13 +61,7 @@ func handleMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if msg.IsCommand() {
 		switch msg.Command() {
 		case "start":
-			handleStartCommand(bot, update) // в logic.go
-		case "create_room":
-			handleCreateRoomCommand(bot, update)
-		case "play_with_bot":
-			handlePlayWithBotCommand(bot, update)
-		case "game_list":
-			handleGameListCommand(bot, update)
+			handleStartCommand(bot, update)
 		default:
 			bot.Send(tgbotapi.NewMessage(msg.Chat.ID, "Команда не распознана. Используйте кнопки или /start."))
 		}
@@ -86,6 +74,23 @@ func handleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	data := query.Data
 
 	switch {
+	case data == "create_room":
+		handleCreateRoomCommand(bot, query)
+	case data == "play_with_bot":
+		handlePlayWithBotCommand(bot, query)
+	case data == "game_list":
+		handleGameListCommand(bot, query)
+	case data == "setup_room":
+		askWhoIsWhite(bot, query)
+	case data == "setup_room":
+		askWhoIsWhite(bot, query)
+	case strings.HasPrefix(data, "setup_room_white:"):
+		choice := strings.TrimPrefix(data, "setup_room_white:")
+		handleSetupRoomWhiteChoice(bot, query, choice)
+	case strings.HasPrefix(data, "choose_figure:"):
+		handleChooseFigureCallback(bot, query)
+	case strings.HasPrefix(data, "move:"):
+		handleMoveCallback(bot, query)
 	case data == "manage_room":
 		handleManageRoomMenu(bot, query)
 	case data == "continue_setup":
@@ -97,7 +102,6 @@ func handleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		// пользователь нажал "Создать и перейти в Чат"
 		roomID := data[len("create_chat_"):]
 		handleCreateChatInstruction(bot, query, roomID)
-
 	case strings.HasPrefix(data, "delete_"):
 		roomID := data[7:]
 		msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Комната "+roomID+" будет удалена (заглушка).")
@@ -110,7 +114,7 @@ func handleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	// Подтверждаем callback
 	callback := tgbotapi.NewCallback(query.ID, "")
 	if _, err := bot.Request(callback); err != nil {
-		utils.Logger.Error("😖 AnswerCallbackQuery error 👾", zap.Error(err))
+		utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 	}
 }
 

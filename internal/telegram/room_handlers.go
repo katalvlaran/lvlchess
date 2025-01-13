@@ -6,15 +6,19 @@ import (
 
 	"telega_chess/internal/db"
 	"telega_chess/internal/game"
+	"telega_chess/internal/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"go.uber.org/zap"
 )
 
-func handleCreateRoomCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+// func handleCreateRoomCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+func handleCreateRoomCommand(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	// Создаём запись в БД (без username, т.к. CreateRoom ещё не знает поля)
-	room, err := db.CreateRoom(update.Message.From.ID)
+	utils.Logger.Info("handleCreateRoomCommand()", zap.Any("query", query))
+	room, err := db.CreateRoom(query.From.ID)
 	if err != nil {
-		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
+		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
 			"Ошибка создания комнаты: "+err.Error()))
 		return
 	}
@@ -52,7 +56,7 @@ func handleCreateRoomCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		tgbotapi.NewInlineKeyboardRow(deleteButton),
 	)
 
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, text)
+	msg := tgbotapi.NewMessage(query.Message.Chat.ID, text)
 	msg.ReplyMarkup = keyboard
 	bot.Send(msg)
 }
@@ -161,4 +165,55 @@ func handleSetRoomCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		db.UpdateRoom(room)
 		notifyGameStarted(bot, room)
 	}
+}
+
+func handleSetupRoomWhiteChoice(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, choice string) {
+	userID := query.From.ID
+
+	// Создаём новую комнату
+	newRoom, err := db.CreateRoom(userID) // базовый метод
+	if err != nil {
+		// handle err
+		return
+	}
+	// newRoom.IsWhiteTurn = true (по умолчанию)
+
+	// Если "me" => newRoom.WhiteID = userID
+	// Если "opponent" => newRoom.WhiteID = nil, newRoom.BlackID = userID
+	if choice == "me" {
+		newRoom.WhiteID = &userID
+		// BlackID = nil
+	} else {
+		// "opponent"
+		newRoom.WhiteID = nil
+		newRoom.BlackID = &userID
+	}
+	newRoom.IsWhiteTurn = true
+
+	// update DB
+	err = db.UpdateRoom(newRoom)
+	if err != nil {
+		// handle err
+		return
+	}
+
+	// Отправляем ответ, например "Комната создана! RoomID = ... Напишите /start room_XXX"
+	roomCreatedMsg := fmt.Sprintf("Комната создана!\nRoomID: %s\nХод белых.\nWhiteID=%v, BlackID=%v",
+		newRoom.RoomID, newRoom.WhiteID, newRoom.BlackID)
+	bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, roomCreatedMsg))
+}
+
+func askWhoIsWhite(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
+	// отправим 2 кнопки
+	btnMe := tgbotapi.NewInlineKeyboardButtonData("Я сам (создатель)", "setup_room_white:me")
+	btnOpponent := tgbotapi.NewInlineKeyboardButtonData("Соперник (второй игрок)", "setup_room_white:opponent")
+
+	kb := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(btnMe, btnOpponent),
+	)
+
+	text := "Кто будет играть за белых?"
+	msg := tgbotapi.NewMessage(query.Message.Chat.ID, text)
+	msg.ReplyMarkup = kb
+	bot.Send(msg)
 }

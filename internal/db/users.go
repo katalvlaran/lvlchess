@@ -23,7 +23,7 @@ type User struct {
 }
 
 func (u *User) Validate() error {
-	return validation.ValidateStruct(&u,
+	return validation.ValidateStruct(u,
 		validation.Field(&u.ID, validation.Required),
 		validation.Field(&u.Username, validation.Required),
 		validation.Field(&u.FirstName, validation.Required),
@@ -54,8 +54,8 @@ func CreateOrUpdateUser(u *User) error {
 	`
 	_, err := Pool.Exec(context.Background(), sql,
 		u.ID, u.Username, u.FirstName, u.ChatID, u.Rating, u.Wins, u.TotalGames)
-	utils.Logger.Error("INSERT:", zap.Error(err))
 	if err != nil {
+		utils.Logger.Error(err.Error(), zap.Error(err))
 		return fmt.Errorf("CreateOrUpdateUser: %v", err)
 
 	}
