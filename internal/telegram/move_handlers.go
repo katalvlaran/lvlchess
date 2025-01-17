@@ -123,19 +123,13 @@ func prepareMoveButtons(bot *tgbotapi.BotAPI, room *db.Room, userID int64) {
 // 3. Выбираем valid moves, где from == b8.
 // 4. Создаём Inline-кнопки вида "move:b8-c6", "move:b8-a6" и отправляем.
 func handleChooseFigureCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
-	data := query.Data // "choose_figure:b8&roomID:3077880c-8a30-42e7-adf5-17acf4e8c5fc"
-	mainParts := strings.Split(data, "&")
-	if len(mainParts) != 2 {
-		// Некорректные данные
-		// Подтверждаем callback
-		callback := tgbotapi.NewCallback(query.ID, "Некорректные данные!")
-		if _, err := bot.Request(callback); err != nil {
-			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
-		}
-
+	action, param, roomID, err := parseCallbackData(query.Data)
+	if err != nil || action != "move" {
+		// error handling
 		return
 	}
-	figureParts := strings.Split(mainParts[0], ":") // choose_figure:b8
+
+	figureParts := strings.Split(param, ":") // choose_figure:b8
 	if len(figureParts) != 2 {
 		// Некорректные данные
 		// Подтверждаем callback
@@ -147,19 +141,6 @@ func handleChooseFigureCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQu
 		return
 	}
 	figureSquare := figureParts[1] // "b8"
-
-	roomParts := strings.Split(mainParts[1], ":") // roomID:3077880c-8a30-42e7-adf5-17acf4e8c5fc
-	if len(roomParts) != 2 {
-		// Некорректные данные
-		// Подтверждаем callback
-		callback := tgbotapi.NewCallback(query.ID, "Некорректные данные!")
-		if _, err := bot.Request(callback); err != nil {
-			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
-		}
-
-		return
-	}
-	roomID := roomParts[1] // "3077880c-8a30-42e7-adf5-17acf4e8c5fc"
 
 	// 1. Определяем roomID. У вас может быть способ: user -> room?
 	//    Или callback data хранит roomID? Вариантов много.
@@ -257,9 +238,33 @@ func handleChooseFigureCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQu
 	}
 }
 
-//================================================================================
-// Ниже пара вспомогательных методов, которые вы можете добавить в notification.go
-//================================================================================
+// parseCallbackData разбирает data вида "move:b8-c6&roomID:xxxx-..."
+// возвращает (action="move", param="b8-c6", roomID="xxxx-...") или ошибку.
+func parseCallbackData(data string) (action, param, roomID string, err error) {
+	mainParts := strings.Split(data, "&")
+	if len(mainParts) != 2 {
+		return "", "", "", fmt.Errorf("incorrect callback data format (no &)")
+	}
+	left, right := mainParts[0], mainParts[1]
+	// left = "move:b8-c6", right="roomID:xxxx..."
+
+	leftParts := strings.Split(left, ":")
+	if len(leftParts) != 2 {
+		return "", "", "", fmt.Errorf("incorrect left part format")
+	}
+	action, param = leftParts[0], leftParts[1]
+
+	rightParts := strings.Split(right, ":")
+	if len(rightParts) != 2 {
+		return "", "", "", fmt.Errorf("incorrect right part format")
+	}
+	if rightParts[0] != "roomID" {
+		return "", "", "", fmt.Errorf("expected 'roomID:', got %s", rightParts[0])
+	}
+	roomID = rightParts[1]
+
+	return action, param, roomID, nil
+}
 
 // Отправляет сообщение с inline-клавиатурой в личку ИЛИ в группу, в зависимости от room.ChatID
 func SendInlineKeyboard(bot *tgbotapi.BotAPI, room *db.Room, text string, keyboard tgbotapi.InlineKeyboardMarkup) {
@@ -273,12 +278,11 @@ func SendInlineKeyboard(bot *tgbotapi.BotAPI, room *db.Room, text string, keyboa
 		msg := tgbotapi.NewMessage(*room.ChatID, text)
 		msg.ReplyMarkup = keyboard
 		bot.Send(msg)
-	} else {
+	} else if room.Player2 != nil {
 		// Личная игра => шлём пользователю, который должен ходить?
 		// Или сразу обоим? up to you.
 		// Для иллюстрации отправим WhiteID:
 		if room.IsWhiteTurn {
-
 			msgWhite := tgbotapi.NewMessage(*room.WhiteID, text)
 			msgWhite.ReplyMarkup = keyboard
 			msgWhite.ParseMode = tgbotapi.ModeMarkdownV2
@@ -289,36 +293,20 @@ func SendInlineKeyboard(bot *tgbotapi.BotAPI, room *db.Room, text string, keyboa
 			msgBlack.ParseMode = tgbotapi.ModeMarkdownV2
 			bot.Send(msgBlack)
 		}
+	} else { // send to Player1
+		msgP1 := tgbotapi.NewMessage(room.Player1.ID, text)
+		msgP1.ReplyMarkup = keyboard
+		msgP1.ParseMode = tgbotapi.ModeMarkdownV2
+		bot.Send(msgP1)
 	}
 }
 
 func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
-	data := query.Data // "move:b8-c6&roomID:3077880c-8a30-42e7-adf5-17acf4e8c5fc"
-	if !strings.HasPrefix(data, "move:") {
-		// На всякий случай проверка
-		callback := tgbotapi.NewCallback(query.ID, "Некорректные данные.")
-		if _, err := bot.Request(callback); err != nil {
-			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
-		}
+	action, moveStr, roomID, err := parseCallbackData(query.Data)
+	if err != nil || action != "move" {
+		// error handling
 		return
 	}
-
-	mainParts := strings.Split(data, "&")
-	if len(mainParts) != 2 {
-		// Некорректные данные
-		// Подтверждаем callback
-		callback := tgbotapi.NewCallback(query.ID, "Некорректные данные!")
-		if _, err := bot.Request(callback); err != nil {
-			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
-		}
-
-		return
-	}
-
-	// Обрезаем префикс "move:"
-	moveStr := strings.TrimPrefix(mainParts[0], "move:")
-	// moveStr будет "b8-c6" (без пробелов и т.п.)
-
 	// Распарсим "b8-c6" в from->to
 	figureParts := strings.Split(moveStr, "-")
 	if len(figureParts) != 2 {
@@ -330,20 +318,6 @@ func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		return
 	}
 	fromSquare, toSquare := figureParts[0], figureParts[1] // "b8", "c6"
-
-	roomParts := strings.Split(mainParts[1], ":") // roomID:3077880c-8a30-42e7-adf5-17acf4e8c5fc
-	if len(roomParts) != 2 {
-		// Некорректные данные
-		// Подтверждаем callback
-		callback := tgbotapi.NewCallback(query.ID, "Некорректные данные!")
-		if _, err := bot.Request(callback); err != nil {
-			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
-		}
-
-		return
-	}
-	roomID := roomParts[1] // "3077880c-8a30-42e7-adf5-17acf4e8c5fc"
-
 	room, err := db.GetRoomByID(roomID)
 	if err != nil || room == nil {
 		callback := tgbotapi.NewCallback(query.ID, "Комната не найдена.")

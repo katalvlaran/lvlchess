@@ -78,30 +78,30 @@
 ## 4. Архитектура
 
 ```
-/chessbot
-├── cmd
-│   └── bot.go              # Точка входа (main)
-├── config
-│   └── config.go           # Чтение и валидация env
-├── internal
-│   ├── db
-│   │   ├── db.go           # InitDB, Pool
-│   │   ├── rooms.go        # CRUD для rooms
-│   │   └── users.go        # CRUD для users
-│   ├── game
-│   │   ├── render.go       # Отрисовка доски (ASCII/горизонталь/SVG?)
-│   │   └── utils.go        # Утилиты (MakeGameStartedMsg, RenderBoardForUser, etc.)
-│   ├── telegram
-│   │   ├── basic_handlers.go     # /start, /game_list, /play_with_bot
-│   │   ├── chat_handlers.go      # Логика группового чата
-│   │   ├── main_handlers.go      # HandleUpdate, handleCallback
-│   │   ├── move_handlers.go      # prepareMoveButtons, handleChooseFigure..., handleMove...
-│   │   ├── notification.go       # NotifyGameStarted, SendMessageToRoomOrUsers
-│   │   └── room_handlers.go      # handleCreateRoom, handleJoinRoom, etc.
-│   └── utils
-│       └── logger.go      # Инициализация логгера
-├── .env                   # Переменные окружения
-├── go.mod                 # Модуль Go
+/telega-chess
+├── /cmd
+│   └── bot.go                 # Точка входа: запуск бота (Telegram), InitDB, ReadConfig, ...
+├── /config
+│   └── config.go              # Чтение/валидация переменных среды (env)
+├── /internal
+│   ├── /db
+│   │   ├── db.go              # Инициализация PostgreSQL (pgxpool)
+│   │   ├── rooms.go           # CRUD-операции с таблицей rooms
+│   │   ├── users.go           # CRUD-операции с таблицей users
+│   └── /game
+│   │   ├── render.go          # ASCII-отрисовка шахматной доски (горизонталь/белый/чёрный)
+│   │   └── utils.go           # Логика AssignRandomColors, parseSquare и др. вспомогательные методы
+│   └── /telegram
+│   │   ├── basic_handlers.go  # /start, /game_list, /play_with_bot
+│   │   ├── chat_handlers.go   # Настройка группы/чата (create_chat, setroom)
+│   │   ├── main_handlers.go   # HandleUpdate, handleCallback, handleNewChatMembers
+│   │   ├── move_handlers.go   # Ходы (prepareMoveButtons, handleMoveCallback), parseCallbackData
+│   │   ├── notification.go    # notifyGameStarted, SendBoardToRoomOrUsers, MakeFinalTitle и т.д.
+│   │   └── room_handlers.go   # handleCreateRoom, handleJoinRoom, ...
+│   └── /utils
+│       └── logger.go          # Глобальный zap-логгер
+├── .env                       # Переменные окружения (BOT_TOKEN, PG_HOST, PG_PORT, ...)
+├── go.mod                     # Go-модуль, список зависимостей (go-telegram-bot-api, jackc/pgx, etc.)
 └── README.md              # Документация (вы здесь!)
 ```
 
@@ -114,11 +114,13 @@
 2. **`config/config.go`**:
     - `ReadConfig()`, `Validate()`.
 3. **`internal/db/rooms.go`**:
-    - `CreateRoom()`, `GetRoomByID()`, `UpdateRoom()`, поля `Room{...}`.
+    - `CreateRoom()`, `GetRoomByID()`, `UpdateRoom()`, поля `Room{
+      RoomID, RoomTitle, Player1, Player2, Status, BoardState, IsWhiteTurn, WhiteID, BlackID, ChatID, CreatedAt, UpdatedAt}`.
 4. **`internal/db/users.go`**:
-    - `CreateOrUpdateUser()`, `GetUserByID()`, поля `User{...}`.
+    - `CreateOrUpdateUser()`, `GetUserByID()`, поля `User{
+      ID, Username, FirstName, ChatID, CurrentRoom, Rating, Wins, TotalGames}`.
 5. **`internal/game/render.go`**:
-    - `RenderBoardCustom()`, `RenderBoardHorizontal()`, (возможно) `RenderBoardFlipped()`, `RenderBoardHorizontalSVG()`.
+    - `RenderASCIIBoardWhite()`, `RenderASCIIBoardHorizontal()`, `RenderASCIIBoardBlack()`.
 6. **`internal/telegram/move_handlers.go`**:
     - `prepareMoveButtons()`, `handleChooseFigureCallback()`, `handleMoveCallback()`.
 7. **`internal/telegram/notification.go`**:

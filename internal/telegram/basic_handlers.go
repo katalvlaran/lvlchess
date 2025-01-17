@@ -1,6 +1,8 @@
 package telegram
 
 import (
+	"fmt"
+
 	"telega_chess/internal/db"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -55,6 +57,62 @@ func handlePlayWithBotCommand(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuer
 }
 
 func handleGameListCommand(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
-	msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Ваши активные игры (заглушка).\n1. Комната 12345.\n2. Комната 67890.")
+	userID := query.From.ID
+
+	rooms, err := db.GetPlayingRoomsForUser(userID)
+	if err != nil {
+		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
+			"Ошибка при получении списка игр: "+err.Error()))
+		return
+	}
+
+	if len(rooms) == 0 {
+		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
+			"У вас нет активных игр."))
+		return
+	}
+
+	// Формируем кнопки
+	// один ряд = одна кнопка
+	var rows [][]tgbotapi.InlineKeyboardButton
+
+	for i, room := range rooms {
+		turnTitle := getCurrentTurnUsername(&room)
+		// "Комната_№%d: %s (ход @%s)"
+		buttonText := fmt.Sprintf("Комната_№%d: %s (ход @%s)",
+			i+1, room.RoomTitle, turnTitle)
+
+		callbackData := fmt.Sprintf("roomID:%s", room.RoomID)
+		btn := tgbotapi.NewInlineKeyboardButtonData(buttonText, callbackData)
+		row := []tgbotapi.InlineKeyboardButton{btn}
+		rows = append(rows, row)
+	}
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
+	msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Ваши активные игры:")
+	msg.ReplyMarkup = keyboard
 	bot.Send(msg)
+}
+
+func getCurrentTurnUsername(r *db.Room) string {
+	// По логике:
+	// if room.IsWhiteTurn -> ход белых => if room.WhiteID==room.Player1.ID -> player1, else player2
+	// else -> ход чёрных => if room.BlackID==room.Player1.ID -> player1, else player2
+	if r.IsWhiteTurn {
+		return "белых"
+		//if r.WhiteID != nil && *r.WhiteID == r.Player1.ID {
+		//	return r.Player1.Username
+		//} else if r.Player2 != nil {
+		//	return r.Player2.Username
+		//}
+	} else {
+		return "чёрных"
+		//if r.BlackID != nil && *r.BlackID == r.Player1.ID {
+		//	return r.Player1.Username
+		//} else if r.Player2 != nil {
+		//	return r.Player2.Username
+		//}
+	}
+
+	return "???"
 }

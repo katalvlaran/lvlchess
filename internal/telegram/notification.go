@@ -13,17 +13,18 @@ import (
 	"go.uber.org/zap"
 )
 
-func makeFinalTitle(r *db.Room) string {
-	if r.Player1.Username == "" {
+func MakeFinalTitle(r *db.Room) string {
+	if r == nil || r.Player1.Username == "" {
 		return "tChess:????"
 	}
-	if r.Player2.Username == "" {
+	if r.Player2 != nil && r.Player2.Username == "" {
 		return fmt.Sprintf("tChess:@%s_⚔️_??", r.Player1.Username)
 	}
-	return fmt.Sprintf("tChess:@%s_⚔️_@%s", r.Player1.Username, r.Player2.Username)
+	return fmt.Sprintf("@%s_⚔️_@%s", r.Player1.Username, r.Player2.Username)
 }
 
 func tryRenameGroup(bot *tgbotapi.BotAPI, chatID int64, newTitle string) {
+	//func tryRenameGroup(bot *tgbotapi.BotAPI, room *Room, newTitle string) {
 	renameConfig := tgbotapi.SetChatTitleConfig{
 		ChatID: chatID,
 		Title:  newTitle,
@@ -51,7 +52,7 @@ func tryRenameGroup(bot *tgbotapi.BotAPI, chatID int64, newTitle string) {
 
 func notifyGameStarted(bot *tgbotapi.BotAPI, room *db.Room) {
 	// 1) Сформируем текст "Игра началась!"
-	introMsg := game.MakeGameStartedMessage(room)
+	introMsg := "Игра началась!\n" + room.RoomTitle
 	// 2) Отправим интро (в группу или в личку)
 	sendMessageToRoomOrUsers(bot, room, introMsg, tgbotapi.ModeHTML)
 
@@ -100,6 +101,7 @@ func sendMessageToRoomOrUsers(bot *tgbotapi.BotAPI, room *db.Room, text string, 
 		sendMessageToUser(bot, room.Player2.ID, text, mode)
 	}
 }
+
 func SendBoardToRoomOrUsers(bot *tgbotapi.BotAPI, r *db.Room) {
 	var asciiBoard string
 	var err error

@@ -14,7 +14,7 @@ import (
 const (
 	modeKeyboard   = "inline_keyboard" // {btn1},{btn2},..
 	modeMarkdown   = "Markdown"
-	modeMarkdownV2 = "MarkdownV2" // ``` code ```
+	modeMarkdownV2 = "MarkdownV2" // code
 	modeHTML       = "HTML"       // default text
 )
 
@@ -70,50 +70,6 @@ func AssignRandomColors(r *db.Room) {
 		black := &r.Player1.ID
 		r.BlackID = black
 	}
-}
-
-func MakeGameStartedMessage(r *db.Room) string {
-	// Возьмём удобные "displayName" для player1 и player2
-	p1Name := getDisplayName(r.Player1.Username, "Player1")
-	var p2Name string
-	if r.Player2.Username == "" {
-		p2Name = "Player2"
-	} else {
-		p2Name = getDisplayName(r.Player2.Username, "Player2")
-	}
-
-	// Кто белые, кто чёрные?
-	var whiteName, blackName string
-
-	if r.WhiteID != nil && *r.WhiteID == r.Player1.ID {
-		whiteName = p1Name
-		blackName = p2Name
-	} else if r.WhiteID != nil && r.Player2 != nil && *r.WhiteID == r.Player2.ID {
-		whiteName = p2Name
-		blackName = p1Name
-	} else {
-		// На случай, если не назначены
-		whiteName = p1Name + "?"
-		blackName = p2Name + "?"
-	}
-
-	// Соберём текст
-	return fmt.Sprintf(
-		"Игра началась!\n%s (белые ♙) vs %s (чёрные ♟)\n\nНачальная позиция:",
-		whiteName, blackName,
-	)
-}
-
-func getDisplayName(usernamePtr string, fallback string) string {
-	if usernamePtr == "" {
-		return fallback
-	}
-	username := usernamePtr
-	// Проверим, есть ли уже "@" в начале
-	if username[0] != '@' {
-		username = "@" + username
-	}
-	return username
 }
 
 // ArrowForMove - определяет направление хода на стандартной доске.

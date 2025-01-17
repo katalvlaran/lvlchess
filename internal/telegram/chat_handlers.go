@@ -27,7 +27,7 @@ func handleCreateChatInstruction(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQ
 
 	hint := tgbotapi.NewMessage(
 		query.Message.Chat.ID,
-		fmt.Sprintf("потребуется для настройки комнаты```\n/setroom %d\n```", roomID))
+		fmt.Sprintf("потребуется для настройки комнаты ```\n/setroom %d\n```", roomID))
 	hint.ParseMode = tgbotapi.ModeMarkdownV2
 	bot.Send(hint)
 }
@@ -83,8 +83,9 @@ func handleContinueSetup(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		bot.Send(tgbotapi.NewMessage(chatID, text))
 	} else {
 		// Есть 2 игрока => "Игра началась!" (или уже идёт)
-		newTitle := makeFinalTitle(room)
-		tryRenameGroup(bot, chatID, newTitle)
+		room.RoomTitle = MakeFinalTitle(room)
+		tryRenameGroup(bot, chatID, room.RoomTitle)
+		db.UpdateRoom(room)
 
 		notifyGameStarted(bot, room)
 	}

@@ -95,6 +95,12 @@ func handleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		handleManageRoomMenu(bot, query)
 	case data == "continue_setup":
 		handleContinueSetup(bot, query)
+	case strings.HasPrefix(data, "roomID:"):
+		roomID := data[len("roomID:"):]
+		handleChooseRoom(bot, query, roomID)
+	case strings.HasPrefix(data, "join_this_room:"):
+		rid := data[len("join_this_room:"):]
+		handleJoinThisRoom(bot, query, rid)
 	case strings.HasPrefix(data, "retry_rename:"):
 		newTitle := data[len("retry_rename:"):]
 		handleRetryRename(bot, query, newTitle)
@@ -106,6 +112,9 @@ func handleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		roomID := data[7:]
 		msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Комната "+roomID+" будет удалена (заглушка).")
 		bot.Send(msg)
+	case strings.HasPrefix(data, "room_entrance:"):
+		roomID := data[len("room_entrance:"):]
+		handleRoomEntrance(bot, query, roomID)
 	default:
 		msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Неизвестный callback: "+data)
 		bot.Send(msg)
@@ -166,15 +175,15 @@ func handleNewChatMembers(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 				room.Player2 = p2
 				game.AssignRandomColors(room) // назначили белые/чёрные, если ещё не назначены
 
-				room.Status = "playing"
+				room.Status = db.RoomStatusPlaying
 				if err := db.UpdateRoom(room); err != nil {
 					bot.Send(tgbotapi.NewMessage(chat.ID, "Ошибка обновления комнаты: "+err.Error()))
 					return
 				}
 
 				// Переименуем в "tChess:@user1_⚔️_@user2"
-				newTitle := makeFinalTitle(room)
-				tryRenameGroup(bot, chat.ID, newTitle)
+				room.RoomTitle = MakeFinalTitle(room)
+				tryRenameGroup(bot, chat.ID, room.RoomTitle)
 
 				notifyGameStarted(bot, room)
 				break

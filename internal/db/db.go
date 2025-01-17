@@ -54,13 +54,11 @@ func initSchema() {
 		user_name  VARCHAR(255),
 		first_name VARCHAR(255),
 		chat_id   BIGINT DEFAULT(0),   -- 0 если ещё не знаем
-	    current_room VARCHAR(36),
+	    current_room VARCHAR(36) NULL,
 		rating    INT DEFAULT 1000,
 		wins      INT DEFAULT 0,
-		total_games INT DEFAULT 0,
-	    CONSTRAINT fk_curr_room FOREIGN KEY(current_room) REFERENCES rooms(id),
-	);
-	`
+		total_games INT DEFAULT 0
+	);`
 	_, err := Pool.Exec(context.Background(), schemaUsers)
 	if err != nil {
 		utils.Logger.Error("😖 Ошибка создания таблицы users: 💀"+err.Error(), zap.Error(err))
@@ -68,23 +66,24 @@ func initSchema() {
 
 	schemaRooms := `
 	CREATE TABLE IF NOT EXISTS rooms (
-		room_id       VARCHAR(36) PRIMARY KEY,
-	    room_title	  TEXT,
-		player1_id    BIGINT NOT NULL,
-		player2_id    BIGINT,
-		status        VARCHAR(20) NOT NULL DEFAULT('waiting'), -- waiting/playing/finished
-		board_state   TEXT,
-	    is_white_turn BOOLEAN NOT NULL DEFAULT true,
-		white_id      BIGINT,
-		black_id      BIGINT NULL,
-		chat_id       BIGINT, -- для группового чата
-		created_at    TIMESTAMP DEFAULT NOW(),
-		updated_at    TIMESTAMP DEFAULT NOW(),
-	    CONSTRAINT fk_p1 FOREIGN KEY(player1_id) REFERENCES users(id),
-	    CONSTRAINT fk_p2 FOREIGN KEY(player2_id) REFERENCES users(id),
-	    CONSTRAINT players_pair UNIQUE (player1_id, player2_id);
-	);
-	`
+		 room_id       VARCHAR(36) PRIMARY KEY,
+		 room_title	  TEXT,
+		 player1_id    BIGINT NOT NULL,
+		 player2_id    BIGINT,
+		 status        VARCHAR(20) NOT NULL DEFAULT('waiting'), -- waiting/playing/finished
+		 board_state   TEXT,
+		 is_white_turn BOOLEAN NOT NULL DEFAULT true,
+		 white_id      BIGINT,
+		 black_id      BIGINT NULL,
+		 chat_id       BIGINT, -- для группового чата
+		 created_at    TIMESTAMP DEFAULT NOW(),
+		 updated_at    TIMESTAMP DEFAULT NOW(),
+		 CONSTRAINT fk_p1 FOREIGN KEY(player1_id) REFERENCES users(id),
+		 CONSTRAINT fk_p2 FOREIGN KEY(player2_id) REFERENCES users(id),
+		 CONSTRAINT players_pair UNIQUE (player1_id, player2_id)
+	 );
+
+	ALTER TABLE users ADD CONSTRAINT fk_curr_room FOREIGN KEY(current_room) REFERENCES rooms(room_id);`
 	_, err = Pool.Exec(context.Background(), schemaRooms)
 	if err != nil {
 		utils.Logger.Error("😖 Ошибка создания таблицы rooms: 💀"+err.Error(), zap.Error(err))
