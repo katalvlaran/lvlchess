@@ -1,11 +1,14 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"telega_chess/internal/db"
+	"telega_chess/internal/db/models"
+	"telega_chess/internal/db/repositories"
 	"telega_chess/internal/game"
 	"telega_chess/internal/utils"
 
@@ -13,46 +16,81 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	CommandDelimiter   = ":"
+	ActionMove         = "move"
+	ActionChooseFigure = "choose_figure"
+	CreateRoom         = "create_room"
+	PlayWithBot        = "play_with_bot"
+	SetupRoom          = "setup_room"
+	RetryRename        = "retry_rename"
+	SetupRoomWhite     = "setup_room_white"
+	ContinueSetup      = "continue_setup"
+	ManageRoom         = "manage_room"
+	RoomID             = "roomID"
+	JoinThisRoom       = "join_this_room"
+	CreateChat         = "create_chat_"
+	GameList           = "game_list"
+	RoomEntrance       = "room_entrance"
+	Delete             = "delete_"
+)
+
+var TelegramHandler *Handler
+
+type Handler struct {
+	Bot      *tgbotapi.BotAPI
+	UserRepo *repositories.UsersRepository
+	RoomRepo *repositories.RoomsRepository
+}
+
+func NewHandler(bot *tgbotapi.BotAPI) {
+	TelegramHandler = &Handler{
+		Bot:      bot,
+		RoomRepo: db.GetRoomsRepo(),
+		UserRepo: db.GetUsersRepo(),
+	}
+}
+
 // HandleUpdate - универсальная точка входа
-func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+func (h *Handler) HandleUpdate(ctx context.Context, update tgbotapi.Update) {
 	switch {
 	case update.Message != nil:
-		handleMessage(bot, update)
+		h.handleMessage(ctx, update)
 	case update.CallbackQuery != nil:
-		handleCallback(bot, update.CallbackQuery)
+		h.handleCallback(ctx, update.CallbackQuery)
 	case update.MyChatMember != nil:
 		// ???
 		// мне нравится и я хочу использовать, но как...?
 		// какие примеры как можно круто обработать подобные события !?
 		// ???
 	case update.ChatMember != nil:
-		handleNewChatMembers(bot, update)
+		h.handleNewChatMembers(ctx, update)
 	}
 }
 
 // handleMessage - обрабатываем сообщения/команды
-func handleMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+func (h *Handler) handleMessage(ctx context.Context, update tgbotapi.Update) {
 	msg := update.Message
 
 	if msg.NewChatMembers != nil {
-		handleNewChatMembers(bot, update)
+		h.handleNewChatMembers(ctx, update)
 	}
 
 	// Проверка: если в группе и msg.IsCommand():
 	if msg.Chat.IsGroup() || msg.Chat.IsSuperGroup() {
 		if msg.IsCommand() {
 			if msg.Command() == "setroom" {
-				handleSetRoomCommand(bot, update)
+				h.handleSetRoomCommand(ctx, update)
 			} else {
 				// Отключаем остальные команды
 				reply := tgbotapi.NewMessage(msg.Chat.ID, "Здесь команды не работают. Используйте /setroom <room_id> или кнопки.")
-				bot.Send(reply)
+				h.Bot.Send(reply)
 			}
 		} else {
 			// Любой текст -> "Используйте кнопки..."
 			//reply := tgbotapi.NewMessage(msg.Chat.ID, "Используйте кнопки (inline).")
 			reply := tgbotapi.NewMessage(msg.Chat.ID, "🌚")
-			bot.Send(reply)
+			h.Bot.Send(reply)
 		}
 		return
 	}
@@ -61,89 +99,87 @@ func handleMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if msg.IsCommand() {
 		switch msg.Command() {
 		case "start":
-			handleStartCommand(bot, update)
+			h.handleStartCommand(ctx, update)
 		default:
-			bot.Send(tgbotapi.NewMessage(msg.Chat.ID, "Команда не распознана. Используйте кнопки или /start."))
+			h.Bot.Send(tgbotapi.NewMessage(msg.Chat.ID, "Команда не распознана. Используйте кнопки или /start."))
 		}
 	} else {
-		bot.Send(tgbotapi.NewMessage(msg.Chat.ID, "🌚"))
+		h.Bot.Send(tgbotapi.NewMessage(msg.Chat.ID, "🌚"))
 	}
 }
 
-func handleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
+func (h *Handler) handleCallback(ctx context.Context, query *tgbotapi.CallbackQuery) {
 	data := query.Data
 
 	switch {
 	case data == "create_room":
-		handleCreateRoomCommand(bot, query)
+		h.handleCreateRoomCommand(ctx, query)
 	case data == "play_with_bot":
-		handlePlayWithBotCommand(bot, query)
+		h.handlePlayWithBotCommand(ctx, query)
 	case data == "game_list":
-		handleGameListCommand(bot, query)
+		h.handleGameListCommand(ctx, query)
 	case data == "setup_room":
-		askWhoIsWhite(bot, query)
-	case data == "setup_room":
-		askWhoIsWhite(bot, query)
+		h.handleAskWhoIsWhite(ctx, query)
 	case strings.HasPrefix(data, "setup_room_white:"):
 		choice := strings.TrimPrefix(data, "setup_room_white:")
-		handleSetupRoomWhiteChoice(bot, query, choice)
+		h.handleSetupRoomWhiteChoice(ctx, query, choice)
 	case strings.HasPrefix(data, "choose_figure:"):
-		handleChooseFigureCallback(bot, query)
+		h.handleChooseFigureCallback(ctx, query)
 	case strings.HasPrefix(data, "move:"):
-		handleMoveCallback(bot, query)
+		h.handleMoveCallback(ctx, query)
 	case data == "manage_room":
-		handleManageRoomMenu(bot, query)
+		h.handleManageRoomMenu(ctx, query)
 	case data == "continue_setup":
-		handleContinueSetup(bot, query)
+		h.handleContinueSetup(ctx, query)
 	case strings.HasPrefix(data, "roomID:"):
 		roomID := data[len("roomID:"):]
-		handleChooseRoom(bot, query, roomID)
+		h.handleChooseRoom(ctx, query, roomID)
 	case strings.HasPrefix(data, "join_this_room:"):
 		rid := data[len("join_this_room:"):]
-		handleJoinThisRoom(bot, query, rid)
+		h.handleJoinThisRoom(ctx, query, rid)
 	case strings.HasPrefix(data, "retry_rename:"):
 		newTitle := data[len("retry_rename:"):]
-		handleRetryRename(bot, query, newTitle)
+		h.handleRetryRename(ctx, query, newTitle)
 	case strings.HasPrefix(data, "create_chat_"):
 		// пользователь нажал "Создать и перейти в Чат"
 		roomID := data[len("create_chat_"):]
-		handleCreateChatInstruction(bot, query, roomID)
+		h.handleCreateChatInstruction(ctx, query, roomID)
 	case strings.HasPrefix(data, "delete_"):
 		roomID := data[7:]
 		msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Комната "+roomID+" будет удалена (заглушка).")
-		bot.Send(msg)
+		h.Bot.Send(msg)
 	case strings.HasPrefix(data, "room_entrance:"):
 		roomID := data[len("room_entrance:"):]
-		handleRoomEntrance(bot, query, roomID)
+		h.handleRoomEntrance(ctx, query, roomID)
 	default:
 		msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Неизвестный callback: "+data)
-		bot.Send(msg)
+		h.Bot.Send(msg)
 	}
 
 	// Подтверждаем callback
 	callback := tgbotapi.NewCallback(query.ID, "")
-	if _, err := bot.Request(callback); err != nil {
+	if _, err := h.Bot.Request(callback); err != nil {
 		utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 	}
 }
 
 // HandleNewChatMembers вызывается, когда в группе появляются новые участники (NewChatMembers)
-func handleNewChatMembers(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+func (h *Handler) handleNewChatMembers(ctx context.Context, update tgbotapi.Update) {
 	chat := update.Message.Chat
 	newMembers := update.Message.NewChatMembers
 
 	// Получим room, если он есть:
-	room, err := db.GetRoomByChatID(chat.ID) // Нужно написать метод в db, типа GetRoomByChatID
+	room, err := h.RoomRepo.GetRoomByChatID(ctx, chat.ID) // Нужно написать метод в db, типа GetRoomByChatID
 	var haveRoom bool
 	if err == nil && room.RoomID != "" {
 		haveRoom = true
 	}
 
 	for _, member := range newMembers {
-		if member.IsBot && member.ID == bot.Self.ID {
+		if member.IsBot && member.ID == h.Bot.Self.ID {
 			// Бот добавлен в новую группу → пытаемся переименовать, если нет прав, выдаём "Повторить..."
-			//tryRenameGroup(bot, chat.ID, fmt.Sprintf("tChess:%d", room.Player1.Username))
-			tryRenameGroup(bot, chat.ID, fmt.Sprintf("tChess:%d", time.Now().Unix()))
+			//tryRenameGroup(ctx, chat.ID, fmt.Sprintf("tChess:%d", room.Player1.Username))
+			h.tryRenameGroup(h.Bot, chat.ID, fmt.Sprintf("tChess:%d", time.Now().Unix()))
 
 			// Покажем кнопку "Управление комнатой"
 			manageButton := tgbotapi.NewInlineKeyboardButtonData("Управление комнатой", "manage_room")
@@ -153,39 +189,39 @@ func handleNewChatMembers(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			msg := tgbotapi.NewMessage(chat.ID,
 				"Привет! Я бот Telega-Chess. Чтобы продолжить настройку комнаты, нажмите [Управление комнатой].")
 			msg.ReplyMarkup = kb
-			bot.Send(msg)
+			h.Bot.Send(msg)
 
 		} else {
 			// Возможно, это второй игрок (или ещё кто-то).
 			// Если у нас уже есть "привязанная" комната (haveRoom == true),
 			// и room.Player2ID == nil => назначаем его вторым игроком
-			if haveRoom && room.Player2 == nil {
-				p2 := &db.User{
+			if haveRoom && room.Player2ID == nil {
+				p2 := &models.User{
 					ID:        member.ID,
 					Username:  member.UserName,
 					FirstName: member.FirstName,
-					ChatID:    db.UnregisteredPrivateChat,
+					ChatID:    models.UnregisteredPrivateChat,
 				}
 
-				if err = db.CreateOrUpdateUser(p2); err != nil {
-					bot.Send(tgbotapi.NewMessage(chat.ID, "Ошибка создания второго игрока: "+err.Error()))
+				if err = h.UserRepo.CreateOrUpdateUser(ctx, p2); err != nil {
+					h.Bot.Send(tgbotapi.NewMessage(chat.ID, "Ошибка создания второго игрока: "+err.Error()))
 					return
 				}
 
-				room.Player2 = p2
+				room.Player2ID = &p2.ID
 				game.AssignRandomColors(room) // назначили белые/чёрные, если ещё не назначены
 
-				room.Status = db.RoomStatusPlaying
-				if err := db.UpdateRoom(room); err != nil {
-					bot.Send(tgbotapi.NewMessage(chat.ID, "Ошибка обновления комнаты: "+err.Error()))
+				room.Status = models.RoomStatusPlaying
+				if err := h.RoomRepo.UpdateRoom(ctx, room); err != nil {
+					h.Bot.Send(tgbotapi.NewMessage(chat.ID, "Ошибка обновления комнаты: "+err.Error()))
 					return
 				}
 
 				// Переименуем в "tChess:@user1_⚔️_@user2"
-				room.RoomTitle = MakeFinalTitle(room)
-				tryRenameGroup(bot, chat.ID, room.RoomTitle)
+				room.RoomTitle = h.MakeFinalTitle(ctx, room)
+				h.tryRenameGroup(h.Bot, chat.ID, room.RoomTitle)
 
-				notifyGameStarted(bot, room)
+				h.notifyGameStarted(ctx, room)
 				break
 			}
 		}

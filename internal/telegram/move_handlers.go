@@ -1,10 +1,11 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
-	"telega_chess/internal/db"
+	"telega_chess/internal/db/models"
 	"telega_chess/internal/game"
 	"telega_chess/internal/utils"
 
@@ -22,22 +23,22 @@ import (
 // 4. Проходим по всем ValidMoves, группируем их по "from"-square.
 // 5. Для каждой фигуры "from" (которая имеет ходы) делаем одну inline-кнопку "choose_figure:fromSquare".
 // 6. Отправляем результат через sendMessageToRoomOrUsers или SendMessageToRoom.
-func prepareMoveButtons(bot *tgbotapi.BotAPI, room *db.Room, userID int64) {
+func (h *Handler) prepareMoveButtons(ctx context.Context, room *models.Room, userID int64) {
 	// 0. Проверим, есть ли вообще boardState
 	if room.BoardState == "" {
-		sendMessageToRoomOrUsers(bot, room, "Нет текущего состояния доски!", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Нет текущего состояния доски!", tgbotapi.ModeHTML)
 		return
 	}
 
 	// 1. Загружаем FEN в notnil/chess
 	fenOption, err := chess.FEN(room.BoardState)
 	if err != nil {
-		sendMessageToRoomOrUsers(bot, room, "Не получилось проанализировать доску!", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Не получилось проанализировать доску!", tgbotapi.ModeHTML)
 		return
 	}
 	chGame := chess.NewGame(fenOption)
 	if chGame == nil {
-		sendMessageToRoomOrUsers(bot, room, "Ошибка восстановления FEN.", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Ошибка восстановления FEN.", tgbotapi.ModeHTML)
 		return
 	}
 
@@ -52,7 +53,7 @@ func prepareMoveButtons(bot *tgbotapi.BotAPI, room *db.Room, userID int64) {
 
 	// Сверим, тот ли это userID
 	if mustMoveUserID != userID {
-		sendMessageToRoomOrUsers(bot, room, "Сейчас не ваш ход!", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Сейчас не ваш ход!", tgbotapi.ModeHTML)
 		return
 	}
 
@@ -84,7 +85,7 @@ func prepareMoveButtons(bot *tgbotapi.BotAPI, room *db.Room, userID int64) {
 	}
 
 	if len(figureSquares) == 0 {
-		sendMessageToRoomOrUsers(bot, room, "Нет доступных ходов!", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Нет доступных ходов!", tgbotapi.ModeHTML)
 		return
 	}
 
@@ -114,7 +115,7 @@ func prepareMoveButtons(bot *tgbotapi.BotAPI, room *db.Room, userID int64) {
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 
 	// 6. Отправляем сообщение
-	SendInlineKeyboard(bot, room, "Выберите фигуру для хода:", keyboard)
+	SendInlineKeyboard(h.Bot, room, "Выберите фигуру для хода:", keyboard)
 }
 
 // handleChooseFigureCallback обрабатывает callback вроде "choose_figure:b8".
@@ -122,36 +123,26 @@ func prepareMoveButtons(bot *tgbotapi.BotAPI, room *db.Room, userID int64) {
 // 2. Загружаем room, boardState.
 // 3. Выбираем valid moves, где from == b8.
 // 4. Создаём Inline-кнопки вида "move:b8-c6", "move:b8-a6" и отправляем.
-func handleChooseFigureCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
-	action, param, roomID, err := parseCallbackData(query.Data)
-	if err != nil || action != "move" {
+func (h *Handler) handleChooseFigureCallback(ctx context.Context, query *tgbotapi.CallbackQuery) {
+	action, figureSquare, roomID, err := parseCallbackData(query.Data)
+	utils.Logger.Error("😖 handleChooseFigureCallback  👾",
+		zap.Any("action", action),
+		zap.Any("param", figureSquare),
+		zap.Any("roomID", roomID),
+		zap.Any("err", err),
+		//zap.Any("err.Error()", err.Error()),
+	)
+	if err != nil || (action != ActionMove && action != ActionChooseFigure) {
 		// error handling
+		utils.Logger.Error("😖 handleChooseFigureCallback  👾", zap.Error(err))
 		return
 	}
 
-	figureParts := strings.Split(param, ":") // choose_figure:b8
-	if len(figureParts) != 2 {
-		// Некорректные данные
-		// Подтверждаем callback
-		callback := tgbotapi.NewCallback(query.ID, "Некорректные данные!")
-		if _, err := bot.Request(callback); err != nil {
-			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
-		}
-
-		return
-	}
-	figureSquare := figureParts[1] // "b8"
-
-	// 1. Определяем roomID. У вас может быть способ: user -> room?
-	//    Или callback data хранит roomID? Вариантов много.
-	//    Допустим, вы храните roomID в userState, или query.Message.Chat.ID -> room, etc.
-	//    Для простоты предположим, вы как-то нашли room:
-
-	room, err := db.GetRoomByID(roomID)
+	room, err := h.RoomRepo.GetRoomByID(ctx, roomID)
 	if err != nil {
 		callback := tgbotapi.NewCallback(query.ID, "Комната не найдена.")
 		utils.Logger.Error("😖 Комната не найдена 👾"+err.Error(), zap.Error(err))
-		if _, err := bot.Request(callback); err != nil {
+		if _, err := h.Bot.Request(callback); err != nil {
 			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 		}
 
@@ -159,23 +150,22 @@ func handleChooseFigureCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQu
 	}
 
 	if room.BoardState == "" {
-		sendMessageToRoomOrUsers(bot, room, "Нет состояния доски!", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Нет состояния доски!", tgbotapi.ModeHTML)
 		return
 	}
 
 	// Распарсим FEN через notnil/chess
 	fenOption, err := chess.FEN(room.BoardState)
 	if err != nil {
-		sendMessageToRoomOrUsers(bot, room, "Не получилось проанализировать доску!", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Не получилось проанализировать доску!", tgbotapi.ModeHTML)
 		return
 	}
 
 	chGame := chess.NewGame(fenOption)
 	if chGame == nil {
-		sendMessageToRoomOrUsers(bot, room, "Ошибка восстановления FEN.", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Ошибка восстановления FEN.", tgbotapi.ModeHTML)
 		return
 	}
-
 	// 2. Фильтруем validMoves, где from == figureSquare
 	validMoves := chGame.ValidMoves()
 	var movesForThisSquare []chess.Move
@@ -183,7 +173,7 @@ func handleChooseFigureCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQu
 	if errParseFrom != nil {
 		callback := tgbotapi.NewCallback(query.ID, "Некорректный квадрат фигуры.")
 		utils.Logger.Error("😖 Некорректный квадрат фигуры. 👾"+errParseFrom.Error(), zap.Error(errParseFrom))
-		if _, err = bot.Request(callback); err != nil {
+		if _, err = h.Bot.Request(callback); err != nil {
 			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 		}
 		return
@@ -195,7 +185,7 @@ func handleChooseFigureCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQu
 	}
 
 	if len(movesForThisSquare) == 0 {
-		sendMessageToRoomOrUsers(bot, room, "У этой фигуры нет допустимых ходов.", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "У этой фигуры нет допустимых ходов.", tgbotapi.ModeHTML)
 		return
 	}
 
@@ -229,11 +219,11 @@ func handleChooseFigureCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQu
 	}
 
 	kb := tgbotapi.NewInlineKeyboardMarkup(rows...)
-	SendInlineKeyboard(bot, room, fmt.Sprintf("Ходы для фигуры %s:", figureSquare), kb)
+	SendInlineKeyboard(h.Bot, room, fmt.Sprintf("Ходы для фигуры %s:", figureSquare), kb)
 
 	// Подтверждаем callback, чтобы Telegram не показывал "крутилку"
 	callback := tgbotapi.NewCallback(query.ID, "Пожалуйста, выберите ход.")
-	if _, err = bot.Request(callback); err != nil {
+	if _, err = h.Bot.Request(callback); err != nil {
 		utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 	}
 }
@@ -267,18 +257,25 @@ func parseCallbackData(data string) (action, param, roomID string, err error) {
 }
 
 // Отправляет сообщение с inline-клавиатурой в личку ИЛИ в группу, в зависимости от room.ChatID
-func SendInlineKeyboard(bot *tgbotapi.BotAPI, room *db.Room, text string, keyboard tgbotapi.InlineKeyboardMarkup) {
+func SendInlineKeyboard(bot *tgbotapi.BotAPI, room *models.Room, text string, keyboard tgbotapi.InlineKeyboardMarkup) {
 	// Предположим, у вас есть логика:
 	//  - если room.ChatID != nil => шлём туда
 	//  - иначе шлём обоим игрокам (или только userID?), смотря как вы устроили проект
 
 	//sendMessageToRoomOrUsers(bot, room, text, modeKeyboard)
-
+	utils.Logger.Error(
+		"😖 SendInlineKeyboard  👾",
+		zap.Any("room.ChatID", room.ChatID),
+		zap.Any("room.Player2ID", room.Player2ID),
+		zap.Any("(room.Player2ID != nil):", (room.Player2ID != nil)),
+		zap.Any("room.room.WhiteID", *room.WhiteID),
+		zap.Any("room.BlackID", *room.BlackID),
+		zap.Any("room.IsWhiteTurn", room.IsWhiteTurn))
 	if room.ChatID != nil {
 		msg := tgbotapi.NewMessage(*room.ChatID, text)
 		msg.ReplyMarkup = keyboard
 		bot.Send(msg)
-	} else if room.Player2 != nil {
+	} else if room.Player2ID != nil {
 		// Личная игра => шлём пользователю, который должен ходить?
 		// Или сразу обоим? up to you.
 		// Для иллюстрации отправим WhiteID:
@@ -294,14 +291,14 @@ func SendInlineKeyboard(bot *tgbotapi.BotAPI, room *db.Room, text string, keyboa
 			bot.Send(msgBlack)
 		}
 	} else { // send to Player1
-		msgP1 := tgbotapi.NewMessage(room.Player1.ID, text)
+		msgP1 := tgbotapi.NewMessage(room.Player1ID, text)
 		msgP1.ReplyMarkup = keyboard
 		msgP1.ParseMode = tgbotapi.ModeMarkdownV2
 		bot.Send(msgP1)
 	}
 }
 
-func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
+func (h *Handler) handleMoveCallback(ctx context.Context, query *tgbotapi.CallbackQuery) {
 	action, moveStr, roomID, err := parseCallbackData(query.Data)
 	if err != nil || action != "move" {
 		// error handling
@@ -311,18 +308,18 @@ func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	figureParts := strings.Split(moveStr, "-")
 	if len(figureParts) != 2 {
 		callback := tgbotapi.NewCallback(query.ID, "Некорректный формат хода.")
-		if _, err := bot.Request(callback); err != nil {
+		if _, err := h.Bot.Request(callback); err != nil {
 			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 		}
 
 		return
 	}
 	fromSquare, toSquare := figureParts[0], figureParts[1] // "b8", "c6"
-	room, err := db.GetRoomByID(roomID)
+	room, err := h.RoomRepo.GetRoomByID(ctx, roomID)
 	if err != nil || room == nil {
 		callback := tgbotapi.NewCallback(query.ID, "Комната не найдена.")
 		utils.Logger.Error("😖 Комната не найдена 👾"+err.Error(), zap.Error(err))
-		if _, err = bot.Request(callback); err != nil {
+		if _, err = h.Bot.Request(callback); err != nil {
 			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 		}
 
@@ -330,20 +327,20 @@ func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	}
 
 	if room.BoardState == "" {
-		sendMessageToRoomOrUsers(bot, room, "Нет текущего состояния доски!", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Нет текущего состояния доски!", tgbotapi.ModeHTML)
 		return
 	}
 
 	// Распарсим FEN через notnil/chess
 	fenOption, err := chess.FEN(room.BoardState)
 	if err != nil {
-		sendMessageToRoomOrUsers(bot, room, "Не получилось проанализировать доску!", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Не получилось проанализировать доску!", tgbotapi.ModeHTML)
 		return
 	}
 	// --- Загружаем FEN в notnil/chess ---
 	chGame := chess.NewGame(fenOption)
 	if chGame == nil {
-		sendMessageToRoomOrUsers(bot, room, "Ошибка восстановления FEN!", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Ошибка восстановления FEN!", tgbotapi.ModeHTML)
 		return
 	}
 
@@ -360,7 +357,7 @@ func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	}
 	if mustMoveUserID != userID {
 		callback := tgbotapi.NewCallback(query.ID, "Сейчас не ваш ход!")
-		if _, err = bot.Request(callback); err != nil {
+		if _, err = h.Bot.Request(callback); err != nil {
 			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 		}
 		return
@@ -376,7 +373,7 @@ func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 			query.ID,
 			fmt.Sprintf("Невозможно распарсить ход %s-%s: %v", fromSquare, toSquare, errParse))
 		utils.Logger.Error("😖 Комната не найдена 👾"+errParse.Error(), zap.Error(errParse))
-		if _, err = bot.Request(callback); err != nil {
+		if _, err = h.Bot.Request(callback); err != nil {
 			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 		}
 		return
@@ -386,10 +383,10 @@ func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	errMove := chGame.Move(mv)
 	if errMove != nil {
 		// Ход невозможен
-		sendMessageToRoomOrUsers(bot, room, "Невозможный ход!", tgbotapi.ModeHTML)
+		h.sendMessageToRoomOrUsers(ctx, room, "Невозможный ход!", tgbotapi.ModeHTML)
 		callback := tgbotapi.NewCallback(query.ID, "")
 		utils.Logger.Error("😖 Комната не найдена 👾"+errMove.Error(), zap.Error(errMove))
-		if _, err = bot.Request(callback); err != nil {
+		if _, err = h.Bot.Request(callback); err != nil {
 			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 		}
 
@@ -401,11 +398,11 @@ func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	newFEN := chGame.FEN()
 	room.BoardState = newFEN
 	room.IsWhiteTurn = !room.IsWhiteTurn
-	if err = db.UpdateRoom(room); err != nil {
-		sendMessageToRoomOrUsers(bot, room, "Ошибка при сохранении нового состояния доски!", tgbotapi.ModeHTML)
+	if err = h.RoomRepo.UpdateRoom(ctx, room); err != nil {
+		h.sendMessageToRoomOrUsers(ctx, room, "Ошибка при сохранении нового состояния доски!", tgbotapi.ModeHTML)
 		callback := tgbotapi.NewCallback(query.ID, "")
 		utils.Logger.Error("😖 Ошибка при сохранении нового состояния доски 👾"+err.Error(), zap.Error(err))
-		if _, err = bot.Request(callback); err != nil {
+		if _, err = h.Bot.Request(callback); err != nil {
 			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 		}
 
@@ -418,15 +415,15 @@ func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		// Игра завершена
 		switch outcome {
 		case chess.WhiteWon:
-			sendMessageToRoomOrUsers(bot, room, "Игра завершена! Победили белые.", tgbotapi.ModeHTML)
+			h.sendMessageToRoomOrUsers(ctx, room, "Игра завершена! Победили белые.", tgbotapi.ModeHTML)
 		case chess.BlackWon:
-			sendMessageToRoomOrUsers(bot, room, "Игра завершена! Победили чёрные.", tgbotapi.ModeHTML)
+			h.sendMessageToRoomOrUsers(ctx, room, "Игра завершена! Победили чёрные.", tgbotapi.ModeHTML)
 		case chess.Draw:
-			sendMessageToRoomOrUsers(bot, room, "Игра завершена! Ничья.", tgbotapi.ModeHTML)
+			h.sendMessageToRoomOrUsers(ctx, room, "Игра завершена! Ничья.", tgbotapi.ModeHTML)
 		}
 		// Можно поставить room.Status="finished", убрать кнопки и т.д.
 		callback := tgbotapi.NewCallback(query.ID, "Ход сделан! Игра окончена.")
-		if _, err = bot.Request(callback); err != nil {
+		if _, err = h.Bot.Request(callback); err != nil {
 			utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 			return
 		}
@@ -440,10 +437,10 @@ func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	} else {
 		moveMsg = fmt.Sprintf("```%s-%s```", fromSquare, toSquare)
 	}
-	sendMessageToRoomOrUsers(bot, room, moveMsg, tgbotapi.ModeMarkdownV2)
+	h.sendMessageToRoomOrUsers(ctx, room, moveMsg, tgbotapi.ModeMarkdownV2)
 
 	// 2) Отправляем обновленную доску
-	SendBoardToRoomOrUsers(bot, room)
+	h.SendBoardToRoomOrUsers(ctx, room)
 
 	// 3) Передаем ход второму игроку:
 	nextTurn := chGame.Position().Turn() // White/Black
@@ -455,11 +452,11 @@ func handleMoveCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	}
 
 	// 4) Подготовим кнопки для следующего игрока
-	prepareMoveButtons(bot, room, nextUserID)
+	h.prepareMoveButtons(ctx, room, nextUserID)
 
 	// --- Подтверждаем callback без alert
 	callback := tgbotapi.NewCallback(query.ID, "Ход успешен!")
-	if _, err = bot.Request(callback); err != nil {
+	if _, err = h.Bot.Request(callback); err != nil {
 		utils.Logger.Error("😖 AnswerCallbackQuery error 👾"+err.Error(), zap.Error(err))
 	}
 }

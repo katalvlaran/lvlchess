@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"telega_chess/config"
+	"telega_chess/internal/db/repositories"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -13,6 +14,11 @@ import (
 )
 
 var Pool *pgxpool.Pool
+
+var (
+	usersRepo *repositories.UsersRepository
+	roomsRepo *repositories.RoomsRepository
+)
 
 // InitDB инициализирует пул соединений и сохраняет в глобальную переменную Pool.
 func InitDB() {
@@ -42,8 +48,21 @@ func InitDB() {
 	utils.Logger.Info("🦾 Успешное подключение к PostgreSQL 🗄")
 	Pool = pool
 
+	// Создаём экземпляры репозиториев
+	usersRepo = repositories.NewUsersRepository(Pool)
+	roomsRepo = repositories.NewRoomsRepository(Pool)
+
 	// Выполним миграцию (упрощённый вариант):
 	initSchema()
+}
+
+// геттеры
+func GetUsersRepo() *repositories.UsersRepository {
+	return usersRepo
+}
+
+func GetRoomsRepo() *repositories.RoomsRepository {
+	return roomsRepo
 }
 
 // initSchema - создаём таблицы, если не созданы

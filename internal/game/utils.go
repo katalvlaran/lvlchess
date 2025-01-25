@@ -6,9 +6,9 @@ import (
 	"math/rand"
 	"time"
 
-	"telega_chess/internal/db"
-
 	"github.com/notnil/chess"
+
+	"telega_chess/internal/db/models"
 )
 
 const (
@@ -39,20 +39,20 @@ func StrToSquare(p string) (chess.Square, error) {
 
 // AssignRandomColors задаёт WhiteID и BlackID, если они ещё не были назначены.
 // Если already assigned (оба не nil), функция ничего не меняет.
-func AssignRandomColors(r *db.Room) {
+func AssignRandomColors(r *models.Room) {
 	// Если уже есть белые/чёрные перепроверка и выход.
 	if r.WhiteID != nil && r.BlackID != nil {
 		if r.WhiteID == nil {
-			r.WhiteID = &r.Player2.ID
+			r.WhiteID = r.Player2ID
 		} else if r.BlackID == nil {
-			r.BlackID = &r.Player2.ID
+			r.BlackID = r.Player2ID
 		}
 
 		return
 	}
 
 	// Убедимся, что у нас есть player1 и player2
-	if r.Player2 == nil {
+	if r.Player2ID == nil {
 		// нет второго игрока — не будем назначать
 		return
 	}
@@ -62,12 +62,12 @@ func AssignRandomColors(r *db.Room) {
 
 	if rand.Intn(2) == 0 {
 		// player1 -> white, player2 -> black
-		r.WhiteID = &r.Player1.ID
-		r.BlackID = &r.Player2.ID
+		r.WhiteID = &r.Player1ID
+		r.BlackID = r.Player2ID
 	} else {
 		// player2 -> white, player1 -> black
-		r.WhiteID = &r.Player2.ID
-		black := &r.Player1.ID
+		r.WhiteID = r.Player2ID
+		black := &r.Player1ID
 		r.BlackID = black
 	}
 }

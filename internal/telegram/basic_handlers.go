@@ -1,28 +1,30 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
 
-	"telega_chess/internal/db"
+	//"telega_chess/internal/db"
+	"telega_chess/internal/db/models"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func handleStartCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update) {
 	// 1) Сохраним пользователя
-	p1 := db.User{
+	p1 := models.User{
 		ID:        update.Message.From.ID,
 		Username:  update.Message.From.UserName,
 		FirstName: update.Message.From.FirstName,
 		ChatID:    update.Message.Chat.ID, // Личная переписка
 	}
-	db.CreateOrUpdateUser(&p1)
+	h.UserRepo.CreateOrUpdateUser(ctx, &p1)
 
 	// 2) Проверка, если /start room_... (старый сценарий handleJoinRoom)
 	args := update.Message.CommandArguments()
 	if len(args) > 5 && args[:5] == "room_" {
 		roomID := args[5:]
-		handleJoinRoom(bot, update, roomID)
+		h.handleJoinRoom(ctx, update, roomID)
 		return
 	}
 
@@ -48,26 +50,26 @@ func handleStartCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	// 5) Отправляем сообщение + inline-клавиатуру
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, welcomeText)
 	msg.ReplyMarkup = keyboard
-	bot.Send(msg)
+	h.Bot.Send(msg)
 }
 
-func handlePlayWithBotCommand(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
+func (h *Handler) handlePlayWithBotCommand(ctx context.Context, query *tgbotapi.CallbackQuery) {
 	msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Игра с ботом в разработке.")
-	bot.Send(msg)
+	h.Bot.Send(msg)
 }
 
-func handleGameListCommand(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
+func (h *Handler) handleGameListCommand(ctx context.Context, query *tgbotapi.CallbackQuery) {
 	userID := query.From.ID
 
-	rooms, err := db.GetPlayingRoomsForUser(userID)
+	rooms, err := h.RoomRepo.GetPlayingRoomsForUser(ctx, userID)
 	if err != nil {
-		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
+		h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
 			"Ошибка при получении списка игр: "+err.Error()))
 		return
 	}
 
 	if len(rooms) == 0 {
-		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
+		h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
 			"У вас нет активных игр."))
 		return
 	}
@@ -91,10 +93,10 @@ func handleGameListCommand(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 	msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Ваши активные игры:")
 	msg.ReplyMarkup = keyboard
-	bot.Send(msg)
+	h.Bot.Send(msg)
 }
 
-func getCurrentTurnUsername(r *db.Room) string {
+func getCurrentTurnUsername(r *models.Room) string {
 	// По логике:
 	// if room.IsWhiteTurn -> ход белых => if room.WhiteID==room.Player1.ID -> player1, else player2
 	// else -> ход чёрных => if room.BlackID==room.Player1.ID -> player1, else player2

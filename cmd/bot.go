@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"telega_chess/config"
@@ -28,6 +29,7 @@ func main() {
 		utils.Logger.Fatal(fmt.Sprintf("Ошибка при инициализации бота: %v", err))
 	}
 
+	telegram.NewHandler(bot)
 	// Включим отладочный режим (потом можно отключить)
 	bot.Debug = true
 
@@ -37,6 +39,6 @@ func main() {
 	u.Timeout = 60
 	updates := bot.GetUpdatesChan(u)
 	for update := range updates {
-		telegram.HandleUpdate(bot, update)
+		telegram.TelegramHandler.HandleUpdate(context.Background(), update)
 	}
 }

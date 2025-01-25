@@ -1,14 +1,13 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
-
-	"telega_chess/internal/db"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func handleCreateChatInstruction(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, roomID string) {
+func (h *Handler) handleCreateChatInstruction(ctx context.Context, query *tgbotapi.CallbackQuery, roomID string) {
 	// Здесь мы не создаём группу автоматически (Telegram API не даёт).
 	// Просто даём инструкцию.
 	instructionText := `
@@ -21,18 +20,18 @@ func handleCreateChatInstruction(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQ
 4) Готово! Я автоматически переименую группу и подготовлю приглошение для второго игрока.
 `
 	// Подставим имя бота
-	formattedText := fmt.Sprintf(instructionText, bot.Self.UserName)
+	formattedText := fmt.Sprintf(instructionText, h.Bot.Self.UserName)
 
-	bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, formattedText))
+	h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, formattedText))
 
 	hint := tgbotapi.NewMessage(
 		query.Message.Chat.ID,
 		fmt.Sprintf("потребуется для настройки комнаты ```\n/setroom %d\n```", roomID))
 	hint.ParseMode = tgbotapi.ModeMarkdownV2
-	bot.Send(hint)
+	h.Bot.Send(hint)
 }
 
-func handleManageRoomMenu(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
+func (h *Handler) handleManageRoomMenu(ctx context.Context, query *tgbotapi.CallbackQuery) {
 	// Показываем 2-3 кнопки:
 	// 1) "Продолжить настройку"
 	// 2) "Отмена" (или "Назад")
@@ -47,14 +46,14 @@ func handleManageRoomMenu(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 
 	msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Выберите действие:")
 	msg.ReplyMarkup = kb
-	bot.Send(msg)
+	h.Bot.Send(msg)
 }
 
-func handleContinueSetup(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
+func (h *Handler) handleContinueSetup(ctx context.Context, query *tgbotapi.CallbackQuery) {
 	chatID := query.Message.Chat.ID
 
 	// Проверим, есть ли уже room, привязанная к этому chatID
-	room, err := db.GetRoomByChatID(chatID)
+	room, err := h.RoomRepo.GetRoomByChatID(ctx, chatID)
 	if err != nil {
 		// Нет привязки
 		text := `
@@ -62,37 +61,37 @@ func handleContinueSetup(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 Введите команду /setroom <room_id> для привязки:
 Например: /setroom 546e81dc-5aff-463a-9681-3e41627b8df2
 `
-		bot.Send(tgbotapi.NewMessage(chatID, text))
+		h.Bot.Send(tgbotapi.NewMessage(chatID, text))
 		return
 	}
 
 	// Если есть, проверим, есть ли второй игрок
-	if room.Player2 == nil {
+	if room.Player2ID == nil {
 		// Предлагаем сгенерировать invite-link
 		linkCfg := tgbotapi.ChatInviteLinkConfig{
 			ChatConfig: tgbotapi.ChatConfig{ChatID: chatID},
 		}
-		link, err := bot.GetInviteLink(linkCfg)
+		link, err := h.Bot.GetInviteLink(linkCfg)
 		if err != nil {
-			bot.Send(tgbotapi.NewMessage(chatID, "Ошибка при создании invite-link: "+err.Error()))
+			h.Bot.Send(tgbotapi.NewMessage(chatID, "Ошибка при создании invite-link: "+err.Error()))
 			return
 		}
 
 		text := fmt.Sprintf("Комната уже привязана к room_id=%s, но пока нет второго игрока.\n"+
 			"Пригласите его ссылкой:\n%s", room.RoomID, link)
-		bot.Send(tgbotapi.NewMessage(chatID, text))
+		h.Bot.Send(tgbotapi.NewMessage(chatID, text))
 	} else {
 		// Есть 2 игрока => "Игра началась!" (или уже идёт)
-		room.RoomTitle = MakeFinalTitle(room)
-		tryRenameGroup(bot, chatID, room.RoomTitle)
-		db.UpdateRoom(room)
+		room.RoomTitle = h.MakeFinalTitle(ctx, room)
+		h.tryRenameGroup(h.Bot, chatID, room.RoomTitle)
+		h.RoomRepo.UpdateRoom(ctx, room)
 
-		notifyGameStarted(bot, room)
+		h.notifyGameStarted(ctx, room)
 	}
 }
 
-func handleRetryRename(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, newTitle string) {
+func (h *Handler) handleRetryRename(ctx context.Context, query *tgbotapi.CallbackQuery, newTitle string) {
 	// Просто заново вызываем tryRenameGroup
 	// chatID = query.Message.Chat.ID
-	tryRenameGroup(bot, query.Message.Chat.ID, newTitle)
+	h.tryRenameGroup(h.Bot, query.Message.Chat.ID, newTitle)
 }
