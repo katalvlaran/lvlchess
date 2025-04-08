@@ -1,10 +1,11 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
-	"telega_chess/internal/db"
+	"telega_chess/internal/db/models"
 	"telega_chess/internal/game"
 	"telega_chess/internal/utils"
 
@@ -13,17 +14,27 @@ import (
 	"go.uber.org/zap"
 )
 
-func MakeFinalTitle(r *db.Room) string {
-	if r == nil || r.Player1.Username == "" {
-		return "tChess:????"
+func (h *Handler) MakeFinalTitle(ctx context.Context, r *models.Room) (title string) {
+	title = "tChess:????"
+	if r != nil && r.Player1ID != 0 {
+		p1, err := h.UserRepo.GetUserByID(ctx, r.Player1ID)
+		if err != nil {
+			return
+		}
+		title = fmt.Sprintf("tChess:@%s_⚔️_??", p1.Username)
+		if r.Player2ID != nil {
+			p2, err := h.UserRepo.GetUserByID(ctx, *r.Player2ID)
+			if err != nil {
+				return
+			}
+			title = fmt.Sprintf("@%s_⚔️_@%s", p1.Username, p2.Username)
+		}
 	}
-	if r.Player2 != nil && r.Player2.Username == "" {
-		return fmt.Sprintf("tChess:@%s_⚔️_??", r.Player1.Username)
-	}
-	return fmt.Sprintf("@%s_⚔️_@%s", r.Player1.Username, r.Player2.Username)
+
+	return
 }
 
-func tryRenameGroup(bot *tgbotapi.BotAPI, chatID int64, newTitle string) {
+func (h *Handler) tryRenameGroup(bot *tgbotapi.BotAPI, chatID int64, newTitle string) {
 	//func tryRenameGroup(bot *tgbotapi.BotAPI, room *Room, newTitle string) {
 	renameConfig := tgbotapi.SetChatTitleConfig{
 		ChatID: chatID,
@@ -50,19 +61,19 @@ func tryRenameGroup(bot *tgbotapi.BotAPI, chatID int64, newTitle string) {
 	}
 }
 
-func notifyGameStarted(bot *tgbotapi.BotAPI, room *db.Room) {
+func (h *Handler) notifyGameStarted(ctx context.Context, room *models.Room) {
 	// 1) Сформируем текст "Игра началась!"
 	introMsg := "Игра началась!\n" + room.RoomTitle
 	// 2) Отправим интро (в группу или в личку)
-	sendMessageToRoomOrUsers(bot, room, introMsg, tgbotapi.ModeHTML)
+	h.sendMessageToRoomOrUsers(ctx, room, introMsg, tgbotapi.ModeHTML)
 
 	// 2) Отправим ASCII доску
-	SendBoardToRoomOrUsers(bot, room)
+	h.SendBoardToRoomOrUsers(ctx, room)
 	// 3) Подготавливаем и отправыялем кнопки
-	prepareMoveButtons(bot, room, *room.WhiteID)
+	h.prepareMoveButtons(ctx, room, *room.WhiteID)
 }
 
-func sendMessageToRoom(bot *tgbotapi.BotAPI, room *db.Room, text string, mode string) error {
+func (h *Handler) sendMessageToRoom(ctx context.Context, room *models.Room, text string, mode string) error {
 	// Если ChatID не задан, ничего не делаем
 	if room.ChatID == nil {
 		return fmt.Errorf("room.ChatID is nil, cannot send to group")
@@ -74,35 +85,35 @@ func sendMessageToRoom(bot *tgbotapi.BotAPI, room *db.Room, text string, mode st
 	} else {
 		msg.ParseMode = tgbotapi.ModeMarkdown
 	}
-	_, err := bot.Send(msg)
+	_, err := h.Bot.Send(msg)
 	return err
 }
 
-func sendMessageToUser(bot *tgbotapi.BotAPI, userID int64, text string, mode string) {
+func (h *Handler) sendMessageToUser(ctx context.Context, userID int64, text string, mode string) {
 	// Выгружаем user
-	u1, err1 := db.GetUserByID(userID)
+	u1, err1 := h.UserRepo.GetUserByID(ctx, userID)
 	if err1 == nil && u1.ChatID != 0 {
 		m1 := tgbotapi.NewMessage(u1.ChatID, text)
 		m1.ParseMode = mode
-		bot.Send(m1)
+		h.Bot.Send(m1)
 	}
 }
 
-func sendMessageToRoomOrUsers(bot *tgbotapi.BotAPI, room *db.Room, text string, mode string) {
+func (h *Handler) sendMessageToRoomOrUsers(ctx context.Context, room *models.Room, text string, mode string) {
 	// Если group chatID задан, шлём туда
 	if room.ChatID != nil {
-		err := sendMessageToRoom(bot, room, text, mode)
+		err := h.sendMessageToRoom(ctx, room, text, mode)
 		if err != nil {
 			utils.Logger.Error("sendMessageToRoom error:"+err.Error(), zap.Error(err))
 		}
 	} else {
 		// Иначе шлём обоим
-		sendMessageToUser(bot, room.Player1.ID, text, mode)
-		sendMessageToUser(bot, room.Player2.ID, text, mode)
+		h.sendMessageToUser(ctx, room.Player1ID, text, mode)
+		h.sendMessageToUser(ctx, *room.Player2ID, text, mode)
 	}
 }
 
-func SendBoardToRoomOrUsers(bot *tgbotapi.BotAPI, r *db.Room) {
+func (h *Handler) SendBoardToRoomOrUsers(ctx context.Context, r *models.Room) {
 	var asciiBoard string
 	var err error
 	if r.ChatID != nil {
@@ -112,7 +123,7 @@ func SendBoardToRoomOrUsers(bot *tgbotapi.BotAPI, r *db.Room) {
 			utils.Logger.Error("game.RenderASCIIBoardWhite:"+err.Error(), zap.Error(err))
 			asciiBoard = "Ошибка формирования горизонтальной доски"
 		}
-		sendMessageToRoomOrUsers(bot, r, asciiBoard, tgbotapi.ModeMarkdownV2)
+		h.sendMessageToRoomOrUsers(ctx, r, asciiBoard, tgbotapi.ModeMarkdownV2)
 	} else {
 		// for White
 		asciiBoard, err = game.RenderASCIIBoardWhite(r.BoardState)
@@ -120,14 +131,14 @@ func SendBoardToRoomOrUsers(bot *tgbotapi.BotAPI, r *db.Room) {
 			utils.Logger.Error("game.RenderASCIIBoardWhite:"+err.Error(), zap.Error(err))
 			asciiBoard = "Ошибка формирования горизонтальной доски"
 		}
-		sendMessageToUser(bot, *r.WhiteID, asciiBoard, tgbotapi.ModeMarkdownV2)
+		h.sendMessageToUser(ctx, *r.WhiteID, asciiBoard, tgbotapi.ModeMarkdownV2)
 		// for Black
 		asciiBoard, err = game.RenderASCIIBoardBlack(r.BoardState)
 		if err != nil {
 			utils.Logger.Error("game.RenderASCIIBoardWhite:"+err.Error(), zap.Error(err))
 			asciiBoard = "Ошибка формирования горизонтальной доски"
 		}
-		sendMessageToUser(bot, *r.BlackID, asciiBoard, tgbotapi.ModeMarkdownV2)
+		h.sendMessageToUser(ctx, *r.BlackID, asciiBoard, tgbotapi.ModeMarkdownV2)
 	}
 }
 

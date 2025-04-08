@@ -1,10 +1,12 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 
-	"telega_chess/internal/db"
+	"telega_chess/internal/db/models"
+	"telega_chess/internal/db/repositories"
 	"telega_chess/internal/game"
 	"telega_chess/internal/utils"
 
@@ -12,15 +14,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// func handleCreateRoomCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-func handleCreateRoomCommand(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
-	// Подготавливаем Player1 (user = Room.Player1)
-	userID := query.From.ID
-	p1, err := db.GetUserByID(userID)
-	// Создаём новую комнату
-	room := db.PrepareNewRoom(p1, MakeFinalTitle(nil))
-	if err = db.CreateRoom(room); err != nil {
-		if err.Error() == db.ErrUniqueViolation {
+// func handleCreateRoomCommand(ctx context.Context, update tgbotapi.Update) {
+func (h *Handler) handleCreateRoomCommand(ctx context.Context, query *tgbotapi.CallbackQuery) {
+	room := models.PrepareNewRoom(query.From.ID, h.MakeFinalTitle(ctx, nil))
+	if err := h.RoomRepo.CreateRoom(ctx, room); err != nil {
+		if err.Error() == repositories.ErrUniqueViolation {
 			// Ищем уже существующую комнату
 			//checkExistingRoom(bot, p1.ID, 0, query.Message.Chat.ID)
 
@@ -28,13 +26,13 @@ func handleCreateRoomCommand(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery
 		}
 
 		// Иначе обрабатываем как прежде
-		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
+		h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
 			"Ошибка создания комнаты: "+err.Error()))
 		return
 	}
 
 	// Формируем ссылку-приглашение (как прежде)
-	inviteLink := fmt.Sprintf("https://t.me/%s?start=room_%s", bot.Self.UserName, room.RoomID)
+	inviteLink := fmt.Sprintf("https://t.me/%s?start=room_%s", h.Bot.Self.UserName, room.RoomID)
 	text := fmt.Sprintf(
 		"Комната создана!\n\nRoomID: %s\nСсылка: %s",
 		room.RoomID, inviteLink,
@@ -68,34 +66,34 @@ func handleCreateRoomCommand(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery
 
 	msg := tgbotapi.NewMessage(query.Message.Chat.ID, text)
 	msg.ReplyMarkup = keyboard
-	bot.Send(msg)
+	h.Bot.Send(msg)
 }
 
-func handleJoinRoom(bot *tgbotapi.BotAPI, update tgbotapi.Update, roomID string) {
+func (h *Handler) handleJoinRoom(ctx context.Context, update tgbotapi.Update, roomID string) {
 	// Сохраним/обновим user
-	newPlayer := &db.User{
+	newPlayer := &models.User{
 		ID:        update.Message.From.ID,
 		Username:  update.Message.From.UserName,
 		FirstName: update.Message.From.FirstName,
 		ChatID:    update.Message.Chat.ID, // личка
 	}
-	db.CreateOrUpdateUser(newPlayer)
+	h.UserRepo.CreateOrUpdateUser(ctx, newPlayer)
 
-	room, err := db.GetRoomByID(roomID)
+	room, err := h.RoomRepo.GetRoomByID(ctx, roomID)
 	if err != nil {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Комната не найдена: "+err.Error())
-		bot.Send(msg)
+		h.Bot.Send(msg)
 		return
 	}
 
-	if room.Player1.ID == newPlayer.ID {
+	if room.Player1ID == newPlayer.ID {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Вы не можете присоединиться к собственной комнате :)")
-		bot.Send(msg)
+		h.Bot.Send(msg)
 		return
 	}
 
 	// Проверяем нет ли уже существующей комнаты с room.P
-	checkExistingRoom(bot, room.Player1.ID, newPlayer.ID)
+	h.checkExistingRoom(ctx, room.Player1ID, newPlayer.ID)
 	/*	if existingRoom, _ := db.GetRoomByPlayerIDs(room.Player1.ID, newPlayer.ID); existingRoom != nil {
 		// Далее: "У вас уже есть комната: room.Title"
 		text := fmt.Sprintf(
@@ -111,35 +109,35 @@ func handleJoinRoom(bot *tgbotapi.BotAPI, update tgbotapi.Update, roomID string)
 		return
 	}*/
 
-	if room.Player2 != nil {
+	if room.Player2ID != nil {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "В этой комнате уже есть второй игрок.")
-		bot.Send(msg)
+		h.Bot.Send(msg)
 		return
 	}
 
 	// Присвоим второго игрока
-	room.Player2 = newPlayer
-	room.Status = db.RoomStatusPlaying
+	room.Player2ID = &newPlayer.ID
+	room.Status = models.RoomStatusPlaying
 	game.AssignRandomColors(room)
-	room.RoomTitle = MakeFinalTitle(room)
-	notifyGameStarted(bot, room)
-	if err = db.UpdateRoom(room); err != nil {
-		bot.Send(tgbotapi.NewMessage(newPlayer.ChatID, "Ошибка обновления комнаты: "+err.Error()))
+	room.RoomTitle = h.MakeFinalTitle(ctx, room)
+	h.notifyGameStarted(ctx, room)
+	if err = h.RoomRepo.UpdateRoom(ctx, room); err != nil {
+		h.Bot.Send(tgbotapi.NewMessage(newPlayer.ChatID, "Ошибка обновления комнаты: "+err.Error()))
 		return
 	}
 }
 
-func handleSetRoomCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+func (h *Handler) handleSetRoomCommand(ctx context.Context, update tgbotapi.Update) {
 	args := update.Message.CommandArguments()
 	if args == "" {
-		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
+		h.Bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
 			"Пожалуйста, укажите room_id, например:\n/setroom 546e81dc-5aff-463a-9681-3e41627b8df2"))
 		return
 	}
 
-	room, err := db.GetRoomByID(args)
+	room, err := h.RoomRepo.GetRoomByID(ctx, args)
 	if err != nil {
-		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
+		h.Bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
 			"Комната не найдена. Проверьте идентификатор."))
 		return
 	}
@@ -147,31 +145,36 @@ func handleSetRoomCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	// Привяжем chat.ID
 	chatID := update.Message.Chat.ID
 	room.ChatID = &chatID
-	if err := db.UpdateRoom(room); err != nil {
-		bot.Send(tgbotapi.NewMessage(chatID, "Не удалось сохранить chatID в БД: "+err.Error()))
+	if err := h.RoomRepo.UpdateRoom(ctx, room); err != nil {
+		h.Bot.Send(tgbotapi.NewMessage(chatID, "Не удалось сохранить chatID в БД: "+err.Error()))
 		return
 	}
 
 	// Переименуем на основе player1Username, если хотим
-	if room.Player1.Username != "" {
-		tryRenameGroup(bot, chatID, fmt.Sprintf("tChess:@%s", room.Player1.Username))
+	p1, err := h.UserRepo.GetUserByID(ctx, room.Player1ID)
+	if err != nil {
+
+	}
+
+	if p1.Username != "" {
+		h.tryRenameGroup(h.Bot, chatID, fmt.Sprintf("tChess:@%s", p1.Username))
 	}
 
 	// Сообщим "Готово!"
-	bot.Send(tgbotapi.NewMessage(chatID,
+	h.Bot.Send(tgbotapi.NewMessage(chatID,
 		fmt.Sprintf("Группа успешно привязана к комнате %s!", room.RoomID)))
 
 	// Теперь проверим, есть ли player2ID
-	if room.Player2 == nil {
+	if room.Player2ID == nil {
 		// Предлагаем пригласить второго
 		// Создадим invite-link
 		linkCfg := tgbotapi.ChatInviteLinkConfig{
 			ChatConfig: tgbotapi.ChatConfig{ChatID: chatID},
 			// Можно ExpireDate, MemberLimit...
 		}
-		inviteLink, err := bot.GetInviteLink(linkCfg)
+		inviteLink, err := h.Bot.GetInviteLink(linkCfg)
 		if err != nil {
-			bot.Send(tgbotapi.NewMessage(chatID, "Ошибка создания ссылки-приглашения: "+err.Error()))
+			h.Bot.Send(tgbotapi.NewMessage(chatID, "Ошибка создания ссылки-приглашения: "+err.Error()))
 			return
 		}
 
@@ -180,26 +183,24 @@ func handleSetRoomCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			"Сейчас в комнате только вы. Отправьте второму игроку эту ссылку:\n%s",
 			inviteLink,
 		)
-		bot.Send(tgbotapi.NewMessage(chatID, text))
+		h.Bot.Send(tgbotapi.NewMessage(chatID, text))
 	} else {
 		// Второй игрок есть => "Игра началась!"
-		room.Status = db.RoomStatusPlaying
-		newTitle := MakeFinalTitle(room)
-		tryRenameGroup(bot, chatID, newTitle)
+		room.Status = models.RoomStatusPlaying
+		newTitle := h.MakeFinalTitle(ctx, room)
+		h.tryRenameGroup(h.Bot, chatID, newTitle)
 		game.AssignRandomColors(room)
 		room.RoomTitle = newTitle
-		db.UpdateRoom(room)
-		notifyGameStarted(bot, room)
+		h.RoomRepo.UpdateRoom(ctx, room)
+		h.notifyGameStarted(ctx, room)
 	}
 }
 
-func handleSetupRoomWhiteChoice(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, choice string) {
+func (h *Handler) handleSetupRoomWhiteChoice(ctx context.Context, query *tgbotapi.CallbackQuery, choice string) {
 	userID := query.From.ID
 
-	p1, err := db.GetUserByID(userID)
-	// Создаём новую комнату
-	newRoom := db.PrepareNewRoom(p1, MakeFinalTitle(nil))
-	if err = db.CreateRoom(newRoom); err != nil {
+	newRoom := models.PrepareNewRoom(userID, h.MakeFinalTitle(ctx, nil))
+	if err := h.RoomRepo.CreateRoom(ctx, newRoom); err != nil {
 		// handle err
 		return
 	}
@@ -218,7 +219,7 @@ func handleSetupRoomWhiteChoice(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQu
 	newRoom.IsWhiteTurn = true
 
 	// update DB
-	err = db.UpdateRoom(newRoom)
+	err := h.RoomRepo.UpdateRoom(ctx, newRoom)
 	if err != nil {
 		// handle err
 		return
@@ -227,10 +228,10 @@ func handleSetupRoomWhiteChoice(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQu
 	// Отправляем ответ, например "Комната создана! RoomID = ... Напишите /start room_XXX"
 	roomCreatedMsg := fmt.Sprintf("Комната создана!\nRoomID: %s\nХод белых.\nWhiteID=%v, BlackID=%v",
 		newRoom.RoomID, newRoom.WhiteID, newRoom.BlackID)
-	bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, roomCreatedMsg))
+	h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, roomCreatedMsg))
 }
 
-func askWhoIsWhite(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
+func (h *Handler) handleAskWhoIsWhite(ctx context.Context, query *tgbotapi.CallbackQuery) {
 	// отправим 2 кнопки
 	btnMe := tgbotapi.NewInlineKeyboardButtonData("Я сам (создатель)", "setup_room_white:me")
 	btnOpponent := tgbotapi.NewInlineKeyboardButtonData("Соперник (второй игрок)", "setup_room_white:opponent")
@@ -242,51 +243,51 @@ func askWhoIsWhite(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	text := "Кто будет играть за белых?"
 	msg := tgbotapi.NewMessage(query.Message.Chat.ID, text)
 	msg.ReplyMarkup = kb
-	bot.Send(msg)
+	h.Bot.Send(msg)
 }
 
-func handleRoomEntrance(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, roomID string) {
+func (h *Handler) handleRoomEntrance(ctx context.Context, query *tgbotapi.CallbackQuery, roomID string) {
 	userID := query.From.ID
 	// 1) Найдём комнату
-	room, err := db.GetRoomByID(roomID)
+	room, err := h.RoomRepo.GetRoomByID(ctx, roomID)
 	if err != nil || room == nil {
-		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, "Комната не найдена."))
+		h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, "Комната не найдена."))
 		return
 	}
 
 	// 2) Проверим, имеет ли пользователь отношение к этой комнате
 	//    (или разрешаем любому входить?)
-	if room.Player1 == nil || room.Player2 == nil {
-		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, "Комната ещё не сформирована полностью."))
+	if room.Player2ID == nil {
+		h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, "Комната ещё не сформирована полностью."))
 		return
 	}
-	if room.Player1.ID != userID && (room.Player2 == nil || room.Player2.ID != userID) {
-		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, "Вы не являетесь участником этой комнаты."))
+	if room.Player1ID != userID && (room.Player2ID == nil || *room.Player2ID != userID) {
+		h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, "Вы не являетесь участником этой комнаты."))
 		return
 	}
 
 	// 3) user.CurrentRoomID = roomID
-	user, _ := db.GetUserByID(userID)
+	user, _ := h.UserRepo.GetUserByID(ctx, userID)
 	//user.CurrentRoomID = roomID
-	user.CurrentRoom = &db.Room{RoomID: roomID}
-	db.CreateOrUpdateUser(user)
+	user.CurrentRoom = &models.Room{RoomID: roomID}
+	h.UserRepo.CreateOrUpdateUser(ctx, user)
 
 	// 4) Сообщим: "Теперь вы вошли в комнату %s"
 	text := fmt.Sprintf(
 		"Вы вошли в комнату %s (%s). Теперь в личке все действия идут в контексте этой комнаты.",
 		room.RoomID,
 		room.RoomTitle)
-	bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, text))
+	h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, text))
 
 	// Можно сразу вызвать prepareMoveButtons(bot, room, userID),
 	// если userID == текущий ход.
 }
 
-func handleChooseRoom(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, roomID string) {
+func (h *Handler) handleChooseRoom(ctx context.Context, query *tgbotapi.CallbackQuery, roomID string) {
 	// 1) Найдём room
-	room, err := db.GetRoomByID(roomID)
+	room, err := h.RoomRepo.GetRoomByID(ctx, roomID)
 	if err != nil || room == nil {
-		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
+		h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID,
 			"Комната не найдена."))
 		return
 	}
@@ -301,7 +302,7 @@ func handleChooseRoom(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, roomI
 	// 3) "Войти в комнату?"
 	// text = ...
 	text := fmt.Sprintf("Войти в комнату_№%s (ход @...)?\n%s", room.RoomTitle)
-	sendMessageToUser(bot, query.Message.Chat.ID, text, tgbotapi.ModeHTML)
+	h.sendMessageToUser(ctx, query.Message.Chat.ID, text, tgbotapi.ModeHTML)
 	// 4) Создаём кнопку "Вход"
 	callbackData := fmt.Sprintf("join_this_room:%s", room.RoomID)
 	btn := tgbotapi.NewInlineKeyboardButtonData("Вход", callbackData)
@@ -309,32 +310,32 @@ func handleChooseRoom(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, roomI
 	msg := tgbotapi.NewMessage(query.Message.Chat.ID, asciiBoard)
 	msg.ParseMode = tgbotapi.ModeMarkdownV2
 	msg.ReplyMarkup = kb
-	bot.Send(msg)
+	h.Bot.Send(msg)
 }
 
-func handleJoinThisRoom(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, roomID string) {
+func (h *Handler) handleJoinThisRoom(ctx context.Context, query *tgbotapi.CallbackQuery, roomID string) {
 	userID := query.From.ID
-	room, err := db.GetRoomByID(roomID)
+	room, err := h.RoomRepo.GetRoomByID(ctx, roomID)
 	if err != nil || room == nil {
-		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, "Комната не найдена."))
+		h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, "Комната не найдена."))
 		return
 	}
 	// возможно, check user belongs to that room
 	// затем user.CurrentRoomID = roomID
-	u, _ := db.GetUserByID(userID)
-	u.CurrentRoom = &db.Room{RoomID: roomID}
-	db.CreateOrUpdateUser(u)
+	u, _ := h.UserRepo.GetUserByID(ctx, userID)
+	u.CurrentRoom = &models.Room{RoomID: roomID}
+	h.UserRepo.CreateOrUpdateUser(ctx, u)
 
 	text := fmt.Sprintf("Вы зашли в комнату %s. В личке теперь используете её для ходов.", room.RoomTitle)
-	bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, text))
+	h.Bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, text))
 	if (room.IsWhiteTurn && *room.WhiteID == userID) || (!room.IsWhiteTurn && *room.BlackID == userID) {
-		prepareMoveButtons(bot, room, userID)
+		h.prepareMoveButtons(ctx, room, userID)
 	}
 }
 
-func checkExistingRoom(bot *tgbotapi.BotAPI, p1ID, p2ID int64 /*, chatID int64*/) bool {
+func (h *Handler) checkExistingRoom(ctx context.Context, p1ID, p2ID int64 /*, chatID int64*/) bool {
 	// true => есть уже
-	existingRoom, err := db.GetRoomByPlayerIDs(p1ID, p2ID)
+	existingRoom, err := h.RoomRepo.GetRoomByPlayerIDs(ctx, p1ID, p2ID)
 	if err != nil {
 		utils.Logger.Info("FindRoomByPlayerIDs()", zap.Any("p1ID:", p1ID), zap.Any("p2ID:", p2ID))
 		return false
@@ -350,7 +351,7 @@ func checkExistingRoom(bot *tgbotapi.BotAPI, p1ID, p2ID int64 /*, chatID int64*/
 		btn := tgbotapi.NewInlineKeyboardButtonData("Войти в комнату", callbackData)
 		kb := tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(btn))
 		//SendInlineKeyboard(bot, room, text, kb)
-		SendInlineKeyboard(bot, existingRoom, text, kb)
+		SendInlineKeyboard(h.Bot, existingRoom, text, kb)
 
 		return true
 	}

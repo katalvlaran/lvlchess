@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+
+  # 1) Go backend (Telegram bot + API)
+  lvlchess_go:
+    build:
+      context: .
+      dockerfile: Dockerfile.go
+    container_name: lvlchess_go
+    ports:
+      - "8080:8080"
+    depends_on:
+      - lvlchess_db
+      - lvlchess_redis
+      # - lvlchess_nats  # Включите, если нужна зависимость от NATS
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    # command: ["./telega-chess", "--some-flag"]
+    # environment:
+    #   PG_HOST: "lvlchess_db"
+
+  # 2) Redis
+  lvlchess_redis:
+    image: redis:7-alpine
+    container_name: lvlchess_redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./redis_data:/data
+    ports:
+      - "6379:6379"
+
+  # 3) PostgreSQL
+  lvlchess_db:
+    image: postgres:14-alpine
+    container_name: lvlchess_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: lvlchess
+    volumes:
+      - ./pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # 4) NATS (JetStream) -- если используете
+  lvlchess_nats:
+    image: nats:2.8.4-alpine
+    container_name: lvlchess_nats
+    command: ["--jetstream", "--store_dir=/data"]
+    volumes:
+      - ./nats_data:/data
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  # (Optional) nats exporter
+  lvlchess_nats_exporter:
+    image: synadia/nats-prometheus-exporter
+    container_name: lvlchess_nats_exporter
+    depends_on:
+      - lvlchess_nats
+    environment:
+      GATEWAY_URL: "http://lvlchess_nats:8222/varz"
+    ports:
+      - "7777:7777"
+
+  # 5) Frontend (React)
+  lvlchess_front:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.front
+    container_name: lvlchess_front
+    ports:
+      - "3000:80"
+    depends_on:
+      - lvlchess_go
+
+  # 6) Prometheus (для мониторинга) - если нужно
+  lvlchess_prometheus:
+    image: prom/prometheus:latest
+    container_name: lvlchess_prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - lvlchess_go
+      - lvlchess_nats
+      - lvlchess_db
+
+  # 7) Grafana - если нужно
+  lvlchess_grafana:
+    image: grafana/grafana:latest
+    container_name: lvlchess_grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./grafana_data:/var/lib/grafana
+    depends_on:
+      - lvlchess_prometheus
