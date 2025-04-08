@@ -39,6 +39,8 @@ func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update
 	//    d) «⚙️ Создать и настроить комнату»
 	btnCreateRoom := tgbotapi.NewInlineKeyboardButtonData("🆕 Создать комнату", "create_room")
 	btnMyGames := tgbotapi.NewInlineKeyboardButtonData("📂 Мои игры", "game_list")
+	btnCreateTournament := tgbotapi.NewInlineKeyboardButtonData("🆕 Создать ТУРНИР", "create_tournament")
+	btnMyTournaments := tgbotapi.NewInlineKeyboardButtonData("📃 Мои турниры", "tournament_list")
 	btnPlayBot := tgbotapi.NewInlineKeyboardButtonData("🤖 Играть с ботом", "play_with_bot")
 	btnSetupRoom := tgbotapi.NewInlineKeyboardButtonData("⚙️ Создать и настроить комнату", "setup_room")
 
@@ -46,6 +48,7 @@ func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(btnCreateRoom, btnMyGames),
 		tgbotapi.NewInlineKeyboardRow(btnPlayBot, btnSetupRoom),
+		tgbotapi.NewInlineKeyboardRow(btnCreateTournament, btnMyTournaments),
 	)
 	// 5) Отправляем сообщение + inline-клавиатуру
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, welcomeText)

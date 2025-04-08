@@ -38,9 +38,11 @@ const (
 var TelegramHandler *Handler
 
 type Handler struct {
-	Bot      *tgbotapi.BotAPI
-	UserRepo *repositories.UsersRepository
-	RoomRepo *repositories.RoomsRepository
+	Bot                   *tgbotapi.BotAPI
+	UserRepo              *repositories.UsersRepository
+	RoomRepo              *repositories.RoomsRepository
+	TournamentRepo        *repositories.TournamentRepository
+	TournamentSettingRepo *repositories.TournamentSettingsRepository
 }
 
 func NewHandler(bot *tgbotapi.BotAPI) {
@@ -112,6 +114,14 @@ func (h *Handler) handleCallback(ctx context.Context, query *tgbotapi.CallbackQu
 	data := query.Data
 
 	switch {
+	case data == "tournament_list":
+		h.handleTournamentList(ctx, query)
+	case data == "create_tournament":
+		h.handleCreateTournament(ctx, query)
+	case data == "join_tournament:<ID>":
+		// извлечь ID, вызвать h.handleJoinTournament
+	case data == "start_tournament:<ID>":
+		// извлечь ID, вызвать h.handleStartTournament
 	case data == "create_room":
 		h.handleCreateRoomCommand(ctx, query)
 	case data == "play_with_bot":

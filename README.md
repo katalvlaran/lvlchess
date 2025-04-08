@@ -80,29 +80,39 @@
 ```
 /telega-chess
 ├── /cmd
-│   └── bot.go                 # Точка входа: запуск бота (Telegram), InitDB, ReadConfig, ...
+│   └── bot.go                              # Точка входа: запуск бота (Telegram), LoadConfig(),InitLogger(),InitDB(),NewBotAPI(botToken),NewHandler(bot),HandleUpdate(context.Background(), update) ...
 ├── /config
-│   └── config.go              # Чтение/валидация переменных среды (env)
+│   └── config.go                           # Чтение/валидация переменных среды (env)
 ├── /internal
 │   ├── /db
-│   │   ├── db.go              # Инициализация PostgreSQL (pgxpool)
-│   │   ├── rooms.go           # CRUD-операции с таблицей rooms
-│   │   ├── users.go           # CRUD-операции с таблицей users
+│   │   ├── /models                         # Структуры описывающие таблицы 
+│   │   │   ├── rooms.go                    # Структура по таблице rooms +валидацией
+│   │   │   ├── tournaments.go              # Структуры по таблицам tournaments и tournament_settings +валидацией
+│   │   │   └── users.go                    # Структура по таблице users +валидацией
+│   │   ├── /repositories                   # CRUD-операции с таблицами
+│   │   │   ├── rooms_repo.go               # CRUD-операции по таблице rooms
+│   │   │   ├── tournament_settings_repo.go # CRUD-операции по таблице tournament_settings
+│   │   │   ├── tournaments_repo.go         # CRUD-операции по таблице tournaments
+│   │   │   └── users_repo.go               # CRUD-операции по таблице users
+│   │   └── pg.go                           # Инициализация PostgreSQL (pgxpool)
 │   └── /game
-│   │   ├── render.go          # ASCII-отрисовка шахматной доски (горизонталь/белый/чёрный)
-│   │   └── utils.go           # Логика AssignRandomColors, parseSquare и др. вспомогательные методы
+│   │   ├── render.go                       # ASCII-отрисовка шахматной доски (RenderASCIIBoardWhite(),RenderASCIIBoardHorizontal(),RenderASCIIBoardBlack())
+│   │   └── utils.go                        # Логика AssignRandomColors, parseSquare и др. вспомогательные методы
 │   └── /telegram
-│   │   ├── basic_handlers.go  # /start, /game_list, /play_with_bot
-│   │   ├── chat_handlers.go   # Настройка группы/чата (create_chat, setroom)
-│   │   ├── main_handlers.go   # HandleUpdate, handleCallback, handleNewChatMembers
-│   │   ├── move_handlers.go   # Ходы (prepareMoveButtons, handleMoveCallback), parseCallbackData
-│   │   ├── notification.go    # notifyGameStarted, SendBoardToRoomOrUsers, MakeFinalTitle и т.д.
-│   │   └── room_handlers.go   # handleCreateRoom, handleJoinRoom, ...
+│   │   ├── basic_handlers.go               # /start, /game_list, /play_with_bot
+│   │   ├── chat_handlers.go                # Настройка группы/чата (create_chat, setroom)
+│   │   ├── main_handlers.go                # HandleUpdate, handleCallback, handleNewChatMembers
+│   │   ├── move_handlers.go                # Ходы (prepareMoveButtons, handleMoveCallback), parseCallbackData
+│   │   ├── notification.go                 # notifyGameStarted, SendBoardToRoomOrUsers, MakeFinalTitle и т.д.
+│   │   ├── room_handlers.go                # handleCreateRoom, handleJoinRoom, ...
+│   │   └── tournament_handlers.go          # handleCreateRoom, handleJoinRoom, ...
 │   └── /utils
-│       └── logger.go          # Глобальный zap-логгер
-├── .env                       # Переменные окружения (BOT_TOKEN, PG_HOST, PG_PORT, ...)
-├── go.mod                     # Go-модуль, список зависимостей (go-telegram-bot-api, jackc/pgx, etc.)
-└── README.md              # Документация (вы здесь!)
+│       └── logger.go                       # Глобальный zap-логгер
+├── .env                                    # Переменные окружения (BOT_TOKEN, PG_HOST, PG_PORT, ...)
+├── docker-compose.yml
+├── Dockerfile
+├── go.mod                                  # Go-модуль, список зависимостей (go-telegram-bot-api, jackc/pgx, etc.)
+└── README.md                               # Документация (вы здесь!)
 ```
 
 ---
@@ -197,8 +207,10 @@
 ## 10. Дальнейшие планы
 
 - **Полноценная поддержка SVG** в группах (вместо ASCII).
-- **AI**-бот (против компьютера) через notnil/chess.Engine API или сторонний движок.
 - **Логирование** ходов в PGN, /moves_history.
 - **Система рейтинга** (wins, totalGames) в таблице `users`.
-
+- **Турнирная система** (уже есть заготовки tournaments_repo.go).
+- **HTML5 Web-интерфейс** (React) интегрировать с Telegram Games API.
+- Расширение на **WhatsApp/Discord** (через микросервисы, NATS).
+- Дополнить **AI/ChessEngine**-бот (против компьютера) через notnil/chess.Engine API или сторонний движок.
 ---

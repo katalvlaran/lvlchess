@@ -16,8 +16,10 @@ import (
 var Pool *pgxpool.Pool
 
 var (
-	usersRepo *repositories.UsersRepository
-	roomsRepo *repositories.RoomsRepository
+	usersRepo              *repositories.UsersRepository
+	roomsRepo              *repositories.RoomsRepository
+	tournamentsRepo        *repositories.TournamentRepository
+	tournamentSettingsRepo *repositories.TournamentSettingsRepository
 )
 
 // InitDB инициализирует пул соединений и сохраняет в глобальную переменную Pool.
@@ -51,6 +53,8 @@ func InitDB() {
 	// Создаём экземпляры репозиториев
 	usersRepo = repositories.NewUsersRepository(Pool)
 	roomsRepo = repositories.NewRoomsRepository(Pool)
+	tournamentsRepo = repositories.NewTournamentRepository(Pool)
+	tournamentSettingsRepo = repositories.NewTournamentSettingsRepository(Pool)
 
 	// Выполним миграцию (упрощённый вариант):
 	initSchema()
@@ -65,18 +69,36 @@ func GetRoomsRepo() *repositories.RoomsRepository {
 	return roomsRepo
 }
 
+func GetTournamentsRepo() *repositories.TournamentRepository {
+	return tournamentsRepo
+}
+
+func GetTournamentSettingsRepo() *repositories.TournamentSettingsRepository {
+	return tournamentSettingsRepo
+}
+
+type Kline struct {
+	OpenTime  int64   `json:"openTime"`
+	Open      float64 `json:"open"`
+	High      float64 `json:"high"`
+	Low       float64 `json:"low"`
+	Close     float64 `json:"close"`
+	Volume    float64 `json:"volume"`
+	CloseTime int64   `json:"closeTime"`
+}
+
 // initSchema - создаём таблицы, если не созданы
 func initSchema() {
 	schemaUsers := `
 	CREATE TABLE IF NOT EXISTS users (
-		id        BIGINT UNIQUE,
-		user_name  VARCHAR(255),
-		first_name VARCHAR(255),
-		chat_id   BIGINT DEFAULT(0),   -- 0 если ещё не знаем
-	    current_room VARCHAR(36) NULL,
-		rating    INT DEFAULT 1000,
-		wins      INT DEFAULT 0,
-		total_games INT DEFAULT 0
+		id BIGINT UNIQUE,
+		OpenTime BIGINT,
+		Open FLOAT,
+		High FLOAT,
+	    Low FLOAT,
+		Close FLOAT,
+		Volume FLOAT,
+		CloseTime INT
 	);`
 	_, err := Pool.Exec(context.Background(), schemaUsers)
 	if err != nil {
@@ -106,5 +128,39 @@ func initSchema() {
 	_, err = Pool.Exec(context.Background(), schemaRooms)
 	if err != nil {
 		utils.Logger.Error("😖 Ошибка создания таблицы rooms: 💀"+err.Error(), zap.Error(err))
+	}
+
+	schemaTournaments := `
+	CREATE TABLE IF NOT EXISTS tournaments (
+	  id          VARCHAR(36) PRIMARY KEY,
+	  title       VARCHAR(255),
+	  prise       TEXT,
+	  players     JSONB,   -- массив ID-шников пользователей: [123, 456, ...]
+	  status      INT DEFAULT 0,       -- 0=planned,1=active,2=finished
+	  start_at    TIMESTAMP DEFAULT NOW(),
+	  created_at  TIMESTAMP DEFAULT NOW(),
+	  updated_at  TIMESTAMP DEFAULT NOW()
+	);
+
+	`
+	_, err = Pool.Exec(context.Background(), schemaTournaments)
+	if err != nil {
+		utils.Logger.Error("😖 Ошибка создания таблицы tournaments: 💀"+err.Error(), zap.Error(err))
+	}
+
+	schemaTournamentSettings := `
+	CREATE TABLE IF NOT EXISTS tournament_settings (
+	  t_id   VARCHAR(36) NOT NULL,
+	  r_id   VARCHAR(36) NOT NULL,
+	  rank   INT DEFAULT 0,
+	  status INT DEFAULT 0,
+	  CONSTRAINT fk_tournament FOREIGN KEY (t_id) REFERENCES tournaments (id),
+	  CONSTRAINT fk_room      FOREIGN KEY (r_id) REFERENCES rooms (room_id)
+	);
+
+	`
+	_, err = Pool.Exec(context.Background(), schemaTournamentSettings)
+	if err != nil {
+		utils.Logger.Error("😖 Ошибка создания таблицы tournament_settings: 💀"+err.Error(), zap.Error(err))
 	}
 }
