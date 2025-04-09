@@ -19,7 +19,8 @@ jobs:
       - name: Build and test
         run: |
           go version
-          go build -v -o telega-chess ./cmd/bot.go
+          docker build -f Dockerfile . -t mytestbot:latest
+          docker build -f frontend/Dockerfile ./frontend -t mytestfront:latest
           # optional: go test ./... or npm run test etc.
 
       # 3) SSH to EC2 (appleboy/ssh-action)
@@ -35,9 +36,7 @@ jobs:
             cd ~/lvlchess
 
             # Обновляем код:
-            git pull
-
-            # собираем или тянем образы
+            git pull origin main
             docker-compose pull
             docker-compose build
             docker-compose up -d
