@@ -6,7 +6,7 @@ services:
   lvlchess_go:
     build:
       context: .
-      dockerfile: Dockerfile.go
+      dockerfile: Dockerfile
     container_name: lvlchess_go
     ports:
       - "8080:8080"
@@ -71,7 +71,7 @@ services:
   lvlchess_front:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.front
+      dockerfile: Dockerfile
     container_name: lvlchess_front
     ports:
       - "3000:80"

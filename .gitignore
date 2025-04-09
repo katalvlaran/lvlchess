@@ -18,3 +18,8 @@ test/
 # OS specific
 .DS_Store
 Thumbs.db
+
+# frontend trash
+frontend/node_modules/*
+frontend/build/*
+frontend/package-lock.json
