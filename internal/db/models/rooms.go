@@ -9,43 +9,41 @@ import (
 )
 
 const (
-	RoomStatusWaiting  = "waiting"
-	RoomStatusPlaying  = "playing"
-	RoomStatusFinished = "finished"
+	RoomStatusWaiting  = "waiting"  // A room is waiting for a second player
+	RoomStatusPlaying  = "playing"  // A room has two players; game is ongoing
+	RoomStatusFinished = "finished" // A room has ended (checkmate or draw)
 )
 
-// Room модель для таблицы rooms
+// Room represents a single chess "room" or match session between players.
 type Room struct {
-	RoomID    string `json:"room_id"`
-	RoomTitle string `json:"room_title"`
-	Player1ID int64  `json:"player_1"`
-	Player2ID *int64 `json:"player_2"` // null, если второй игрок не присоединился
-	//Player1     *User     `json:"player_1"`
-	//Player2     *User     `json:"player_2"` // null, если второй игрок не присоединился
-	Status      string    `json:"status"` // waiting/playing/finished
-	BoardState  string    `json:"board_state"`
-	IsWhiteTurn bool      `json:"is_white_turn"`
-	WhiteID     *int64    `json:"white_id"`
-	BlackID     *int64    `json:"black_id"`
-	ChatID      *int64    `json:"chat_id"` // null, если комнату-группу ещё не создали
+	RoomID      string    `json:"room_id"`       // Unique identifier (UUID)
+	RoomTitle   string    `json:"room_title"`    // Title/nickname of the room
+	Player1ID   int64     `json:"player_1"`      // Telegram user ID of the first player
+	Player2ID   *int64    `json:"player_2"`      // Telegram user ID of the second player, nil if not joined
+	Status      string    `json:"status"`        // One of RoomStatusWaiting|RoomStatusPlaying|RoomStatusFinished
+	BoardState  string    `json:"board_state"`   // FEN string representing current board position
+	IsWhiteTurn bool      `json:"is_white_turn"` // Whose turn it is; 'true' means White's turn
+	WhiteID     *int64    `json:"white_id"`      // Which player is assigned the White pieces
+	BlackID     *int64    `json:"black_id"`      // Which player is assigned the Black pieces
+	ChatID      *int64    `json:"chat_id"`       // Group chat ID if this room is associated with a Telegram group
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// Validate checks basic constraints, e.g., non-empty RoomID, valid status, etc.
 func (u *Room) Validate() error {
 	return validation.ValidateStruct(u,
 		validation.Field(&u.RoomID, validation.Required),
 		validation.Field(&u.Player1ID, validation.Required),
 		validation.Field(&u.Player1ID, validation.NilOrNotEmpty),
-		validation.Field(&u.Status, validation.Required, validation.In(RoomStatusWaiting, RoomStatusPlaying, RoomStatusFinished)),
+		validation.Field(&u.Status, validation.Required,
+			validation.In(RoomStatusWaiting, RoomStatusPlaying, RoomStatusFinished)),
 		validation.Field(&u.BoardState, validation.Required),
-		//validation.Field(&u.IsWhiteTurn, validation.NilOrNotEmpty),
-		//validation.Field(&u.WhiteID, validation.Required),
-		//validation.Field(&u.BlackID, validation.Required),
-		//validation.Field(&u.ChatID, validation.Required),
 	)
 }
 
+// PrepareNewRoom is a helper that builds a new Room object.
+// By default, the BoardState is the standard chess initial position (via chess.NewGame().FEN()).
 func PrepareNewRoom(p1ID int64, title string) *Room {
 	return &Room{
 		RoomID:      uuid.NewString(),
@@ -53,6 +51,6 @@ func PrepareNewRoom(p1ID int64, title string) *Room {
 		Player1ID:   p1ID,
 		Status:      RoomStatusWaiting,
 		BoardState:  chess.NewGame().FEN(),
-		IsWhiteTurn: true,
+		IsWhiteTurn: true, // Typically starts with White
 	}
 }
