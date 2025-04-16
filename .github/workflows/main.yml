@@ -23,20 +23,21 @@ jobs:
           docker build -f frontend/Dockerfile ./frontend -t mytestfront:latest
           # optional: go test ./... or npm run test etc.
 
-      # 3) SSH to EC2 (appleboy/ssh-action)
+      # 3) SSH into EC2 (via appleboy/ssh-action) to pull & deploy
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v0.1.8
         with:
           host: ${{ secrets.EC2_HOST }}        # e.g. ec2-44-202-18-234.compute-1.amazonaws.com
           username: ec2-user
           port: 22
-          key: ${{ secrets.EC2_SSH_KEY }}      # <-- приватный ключ
+          key: ${{ secrets.EC2_SSH_KEY }}      # <-- PRIVETE KEY
           script: |
-            # Считаем, что мы уже имеем ~/lvlchess с .git
+            # We assume ~/lvlchess is already cloned with a .git folder.
             cd ~/lvlchess
 
-            # Обновляем код:
+            
             git pull origin master
+            # Then re-build & deploy via docker-compose
             docker-compose pull
             docker-compose build
             docker-compose up -d
