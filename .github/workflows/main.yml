@@ -20,8 +20,8 @@ jobs:
         run: |
           go version
           docker build -f Dockerfile . -t mytestbot:latest
-          docker build -f frontend/Dockerfile ./frontend -t mytestfront:latest
-          # optional: go test ./... or npm run test etc.
+          docker build -f frontend/Dockerfile ./frontend -t mytestfront:latest  
+        # optional: go test ./... or npm run test etc.
 
       # 3) SSH into EC2 (via appleboy/ssh-action) to pull & deploy
       - name: Deploy to EC2
@@ -32,10 +32,10 @@ jobs:
           port: 22
           key: ${{ secrets.EC2_SSH_KEY }}      # <-- PRIVETE KEY
           script: |
+ 
             # We assume ~/lvlchess is already cloned with a .git folder.
             cd ~/lvlchess
 
-            
             git pull origin master
             # Then re-build & deploy via docker-compose
             docker-compose pull
