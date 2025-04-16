@@ -8,9 +8,11 @@ import (
 
 	"github.com/notnil/chess"
 
-	"telega_chess/internal/db/models"
+	"lvlchess/internal/db/models"
 )
 
+// These constants define modes for rendering messages or injecting markup.
+// They’re used in Telegram-based logic (some or all might be replaced with Telegram’s parse modes).
 const (
 	modeKeyboard   = "inline_keyboard" // {btn1},{btn2},..
 	modeMarkdown   = "Markdown"
@@ -18,6 +20,8 @@ const (
 	modeHTML       = "HTML"       // default text
 )
 
+// strToSquareMap helps us quickly convert a string like "e4" into a chess.Square constant.
+// This is used when we parse user actions (like "move:e2-e4").
 var strToSquareMap = map[string]chess.Square{
 	"a1": chess.A1, "a2": chess.A2, "a3": chess.A3, "a4": chess.A4, "a5": chess.A5, "a6": chess.A6, "a7": chess.A7, "a8": chess.A8,
 	"b1": chess.B1, "b2": chess.B2, "b3": chess.B3, "b4": chess.B4, "b5": chess.B5, "b6": chess.B6, "b7": chess.B7, "b8": chess.B8,
@@ -29,135 +33,129 @@ var strToSquareMap = map[string]chess.Square{
 	"h1": chess.H1, "h2": chess.H2, "h3": chess.H3, "h4": chess.H4, "h5": chess.H5, "h6": chess.H6, "h7": chess.H7, "h8": chess.H8,
 }
 
+// StrToSquare attempts to convert something like "e4" into a chess.Square. Returns an error if invalid.
 func StrToSquare(p string) (chess.Square, error) {
 	if _, ok := strToSquareMap[p]; !ok {
-		return chess.NoSquare, errors.New(fmt.Sprintf("не существующая позиция:%s", p))
+		return chess.NoSquare, errors.New(fmt.Sprintf("invalid square: %s", p))
 	}
 
 	return strToSquareMap[p], nil
 }
 
-// AssignRandomColors задаёт WhiteID и BlackID, если они ещё не были назначены.
-// Если already assigned (оба не nil), функция ничего не меняет.
+// AssignRandomColors sets WhiteID or BlackID in the given room if not already assigned.
+// If the second player has joined (Player2ID != nil) and WhiteID/BlackID are nil, we do a random coin flip
+// to decide who is white vs black. If already assigned, does nothing.
 func AssignRandomColors(r *models.Room) {
-	// Если уже есть белые/чёрные перепроверка и выход.
+	// If both WhiteID and BlackID are already set, do nothing.
 	if r.WhiteID != nil && r.BlackID != nil {
 		if r.WhiteID == nil {
 			r.WhiteID = r.Player2ID
 		} else if r.BlackID == nil {
 			r.BlackID = r.Player2ID
 		}
-
 		return
 	}
 
-	// Убедимся, что у нас есть player1 и player2
+	// If we don't even have a second player, we can't assign.
 	if r.Player2ID == nil {
-		// нет второго игрока — не будем назначать
 		return
 	}
 
-	// Инициализируем seed (можно один раз в main(), но если не инициализировано, сделаем локально)
+	// Initialize the random seed once. If we haven't seeded at startup, do a local seed here.
 	rand.Seed(time.Now().UnixNano())
 
+	// 50/50 chance for player1 to be white or black.
 	if rand.Intn(2) == 0 {
-		// player1 -> white, player2 -> black
 		r.WhiteID = &r.Player1ID
 		r.BlackID = r.Player2ID
 	} else {
-		// player2 -> white, player1 -> black
 		r.WhiteID = r.Player2ID
 		black := &r.Player1ID
 		r.BlackID = black
 	}
 }
 
-// ArrowForMove - определяет направление хода на стандартной доске.
-// Параметр IsWhiteTurn указывает, играет ли сторона белыми фигурами.
-func ArrowForMove(from, to chess.Square, IWT bool) string {
+// The arrow icons below are an optional way to indicate direction for a move in ASCII text.
+// E.g., if a piece moves from b2->b4, White might see "⬆️", while Black might see "⬇️", etc.
+
+// ArrowForMove calculates an arrow symbol (⬆️, ↘️, etc.) for normal board orientation
+// depending on the difference in ranks/files, flipping if it's black's turn.
+func ArrowForMove(from, to chess.Square, isWhiteTurn bool) string {
 	fFile, fRank := from.File(), from.Rank()
 	tFile, tRank := to.File(), to.Rank()
 
-	dFile := int(tFile) - int(fFile) // >0 — вправо, <0 — влево
-	dRank := int(tRank) - int(fRank) // >0 — вверх (для белых), <0 — вниз
+	dFile := int(tFile) - int(fFile) // >0 => right, <0 => left
+	dRank := int(tRank) - int(fRank) // >0 => up for white, <0 => down
 
-	if !IWT {
-		// Инвертируем направление для чёрных (поворот на 180 градусов)
+	if !isWhiteTurn {
+		// If black is moving, we invert the direction to match black's perspective
 		dRank = -dRank
 		dFile = -dFile
 	}
 
-	// Вертикальные движения
+	// Vertical
 	if dFile == 0 {
 		if dRank > 0 {
 			return "⬆️"
-		} else {
-			return "⬇️"
 		}
+		return "⬇️"
 	}
-
-	// Горизонтальные движения
+	// Horizontal
 	if dRank == 0 {
 		if dFile > 0 {
 			return "➡️"
-		} else {
-			return "⬅️"
 		}
+		return "⬅️"
 	}
-
-	// Диагональные движения
-	if dFile > 0 && dRank > 0 {
+	// Diagonal
+	switch {
+	case dFile > 0 && dRank > 0:
 		return "↗️"
-	} else if dFile > 0 && dRank < 0 {
+	case dFile > 0 && dRank < 0:
 		return "↘️"
-	} else if dFile < 0 && dRank > 0 {
+	case dFile < 0 && dRank > 0:
 		return "↖️"
-	} else {
+	default:
 		return "↙️"
 	}
 }
 
-// ArrowForMoveHorizontal - определяет направление хода для горизонтально расположенной доски.
-// Параметр isWhiteTurn указывает, играет ли сторона белыми фигурами.
-func ArrowForMoveHorizontal(from, to chess.Square, IWT bool) string {
+// ArrowForMoveHorizontal is similar but for a "horizontal" orientation.
+// Instead of rank/file meaning up/down or left/right, we swap them for a 90° layout.
+func ArrowForMoveHorizontal(from, to chess.Square, isWhiteTurn bool) string {
 	fFile, fRank := from.File(), from.Rank()
 	tFile, tRank := to.File(), to.Rank()
 
-	dFile := int(fRank) - int(tRank) // >0 — вверх, <0 — вниз (для горизонтальной доски)
-	dRank := int(tFile) - int(fFile) // >0 — вправо, <0 — влево (для горизонтальной доски)
+	// For horizontal, let's treat rank differences as "vertical," file differences as "horizontal," etc.
+	dFile := int(fRank) - int(tRank) // >0 => up, <0 => down
+	dRank := int(tFile) - int(fFile) // >0 => right, <0 => left
 
-	if !IWT {
-		// Инвертируем направление для чёрных (поворот на 180 градусов)
+	if !isWhiteTurn {
 		dRank = -dRank
 		dFile = -dFile
 	}
 
-	// Вертикальные движения (горизонтальная доска)
+	// Then the logic is analogous:
 	if dRank == 0 {
 		if dFile > 0 {
 			return "⬆️"
-		} else {
-			return "⬇️"
 		}
+		return "⬇️"
 	}
-
-	// Горизонтальные движения (горизонтальная доска)
 	if dFile == 0 {
 		if dRank > 0 {
 			return "➡️"
-		} else {
-			return "⬅️"
 		}
+		return "⬅️"
 	}
-
-	// Диагональные движения
-	if dFile > 0 && dRank > 0 {
+	switch {
+	case dFile > 0 && dRank > 0:
 		return "↗️"
-	} else if dFile > 0 && dRank < 0 {
+	case dFile > 0 && dRank < 0:
 		return "↘️"
-	} else if dFile < 0 && dRank > 0 {
+	case dFile < 0 && dRank > 0:
 		return "↖️"
-	} else {
+	default:
 		return "↙️"
 	}
 }

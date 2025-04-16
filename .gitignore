@@ -1,25 +1,36 @@
-# Environment
+# Environment & secrets
 .env
 *.local
 
-# IDE
+# Editor/IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 
+# Go build artifacts
+*.exe
+*.test
+*.out
+
 # Logs
 *.log
 logs/
 
-# self tests
+# Optional for any self tests
 test/
 
-# OS specific
+# OS-specific files
 .DS_Store
 Thumbs.db
 
-# frontend trash
+# Node/React
 frontend/node_modules/*
 frontend/build/*
 frontend/package-lock.json
+npm-debug.log
+yarn-error.log
+
+# Others
+dist/
+.tmp/

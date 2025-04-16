@@ -1,34 +1,35 @@
-# Dockerfile.go
-#
-# 1) Stage builder на базе golang:1.19-alpine (можно другую версию, лишь бы поддерживала Go)
-# 2) Копируем go.mod, go.sum, качаем зависимости
-# 3) Копируем всё остальное, собираем бинарь
-# 4) Финальный образ: минимальный alpine, копируем бинарник, выставляем порт
+# Dockerfile for the Go backend (Telegram Bot)
 
+# ======================================
+# 1) Builder Stage
+#    - We compile the Go binary in a container with the necessary build tools
+# ======================================
 FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
-# Скопируем go.mod и go.sum заранее
+# Copy go.mod and go.sum first to leverage caching
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Скопируем весь проект lvlchess
+# Copy the entire project (lvlchess) into the container
 COPY . .
 
-# Сборка
-RUN go build -o telega-chess ./cmd/bot.go
+# Build the binary (bot.go as main entry)
+RUN go build -o lvlchess ./cmd/bot.go
 
-
-# Final stage
+# ======================================
+# 2) Final Minimal Stage
+#    - Use a lightweight Alpine image to run the compiled binary
+# ======================================
 FROM alpine:3.17
 WORKDIR /app
 
-# Скопировать наш скомпилённый бинарник
-COPY --from=builder /app/telega-chess /app/
+# Copy the compiled binary from builder
+COPY --from=builder /app/lvlchess /app/
 
-# порт 8080 (как указано в docker-compose)
+# Expose port 8080 in case we want HTTP endpoints
 EXPOSE 8080
 
-# Запускаем приложение
-CMD ["/app/telega-chess"]
+# Default command: run the lvlchess binary (the Telegram bot)
+CMD ["/app/lvlchess"]

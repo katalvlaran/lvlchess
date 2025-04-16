@@ -1,3 +1,8 @@
+<!--
+  This minimal HTML file is the entry point for the React application.
+  React will render into the <div id="root"></div> element.
+  Typically, we can add meta tags or custom icons here if needed.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,7 +11,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
 <body>
-<noscript>You need to enable JavaScript to run this app.</noscript>
+<noscript>
+    <!--
+      If JavaScript is disabled, React won't run at all.
+      This message can help users understand or prompt them to enable JS.
+    -->
+    You need to enable JavaScript to run this app.
+</noscript>
+
+<!--
+  The root element where ReactDOM will inject the Virtual DOM (see src/index.js).
+-->
 <div id="root"></div>
+
 </body>
 </html>
