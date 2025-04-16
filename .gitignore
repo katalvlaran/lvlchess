@@ -34,3 +34,6 @@ yarn-error.log
 # Others
 dist/
 .tmp/
+pg_data/
+redis_data/
+nats_data/
