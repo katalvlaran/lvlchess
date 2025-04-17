@@ -7,20 +7,10 @@
 */
 
 import React from 'react';
+import TelegramGame from './TelegramGame';
 
 function App() {
-    return (
-        <div style={{ margin: '20px', fontFamily: 'sans-serif' }}>
-            <h1>Hello from lvlChess React</h1>
-            <p>This is a minimal example!</p>
-            {/*
-         Possible expansions:
-           - fetch data from your Go backend
-           - show a chessboard (e.g., with a library or custom code)
-           - integrate Telegram WebApp if needed
-      */}
-        </div>
-    );
+    return <TelegramGame />;
 }
 
 export default App;

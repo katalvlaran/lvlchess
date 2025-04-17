@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"lvlchess/config"
+	"lvlchess/internal/utils"
+
 	// "lvlchess/internal/db" could be used if we needed direct db access here, but we rely on repos in Handler
 	"lvlchess/internal/db/models"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"go.uber.org/zap"
 )
 
 // handleStartCommand is invoked when a user sends the /start command in private chat.
@@ -34,7 +38,7 @@ func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update
 	}
 
 	// 4) If not joining a room, present a standard welcome text + inline keyboard menu.
-	welcomeText := "Добро пожаловать в Telega-Chess!\n" +
+	welcomeText := "Добро пожаловать в lvlChess!\n" +
 		"Ниже есть несколько возможностей:"
 
 	// We define some inline buttons representing actions (create room, game list, etc.).
@@ -44,12 +48,16 @@ func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update
 	btnMyTournaments := tgbotapi.NewInlineKeyboardButtonData("📃 Мои турниры", "tournament_list")
 	btnPlayBot := tgbotapi.NewInlineKeyboardButtonData("🤖 Играть с ботом", PlayWithBot)
 	btnSetupRoom := tgbotapi.NewInlineKeyboardButtonData("⚙️ Создать и настроить комнату", SetupRoom)
+	btnPlayGame := tgbotapi.NewInlineKeyboardButtonData("▶️ Играть в lvlChess", config.Cfg.GameShortName)
+
+	utils.Logger.Info("handleStartCommand", zap.String("GameShortName", config.Cfg.GameShortName))
 
 	// You can arrange these buttons in multiple rows as below.
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(btnCreateRoom, btnMyGames),
 		tgbotapi.NewInlineKeyboardRow(btnPlayBot, btnSetupRoom),
 		tgbotapi.NewInlineKeyboardRow(btnCreateTournament, btnMyTournaments),
+		tgbotapi.NewInlineKeyboardRow(btnPlayGame),
 	)
 
 	// 5) Send the message with keyboard attached.
@@ -57,6 +65,16 @@ func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update
 	msg.ReplyMarkup = keyboard
 	h.Bot.Send(msg)
 }
+
+//func newInlineKeyboardButtonGame(text, gameShortName string) tgbotapi.InlineQueryResultGame {
+//	//func newInlineKeyboardButtonGame(text, data string) tgbotapi.InlineKeyboardButton {
+//	return tgbotapi.InlineQueryResultGame{
+//		Type: "game",
+//
+//		GameShortName: gameShortName,
+//		CallbackGame:  &tgbotapi.CallbackGame{},
+//	}
+//}
 
 // handlePlayWithBotCommand is a placeholder for a future feature: playing vs an AI or local engine.
 // Currently, we simply send a message "In development."
