@@ -46,7 +46,7 @@ func (h *Handler) handleCreateRoomCommand(ctx context.Context, query *tgbotapi.C
 	// A second button "Invite" that uses the telegram share/url scheme
 	shareURL := fmt.Sprintf("https://t.me/share/url?url=%s&text=%s",
 		url.QueryEscape(inviteLink),
-		url.QueryEscape("Приглашаю сыграть в Telega-Chess!"),
+		url.QueryEscape("Приглашаю сыграть в lvlChess!"),
 	)
 	inviteButton := tgbotapi.NewInlineKeyboardButtonURL("Пригласить", shareURL)
 

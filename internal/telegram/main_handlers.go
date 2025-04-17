@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"lvlchess/config"
 	"lvlchess/internal/db"
 	"lvlchess/internal/db/models"
 	"lvlchess/internal/db/repositories"
@@ -58,8 +59,8 @@ func NewHandler(bot *tgbotapi.BotAPI) {
 		RoomRepo: db.GetRoomsRepo(),
 		UserRepo: db.GetUsersRepo(),
 		// If you want to handle tournaments here:
-		// TournamentRepo: db.GetTournamentsRepo(),
-		// TournamentSettingRepo: db.GetTournamentSettingsRepo(),
+		TournamentRepo:        db.GetTournamentsRepo(),
+		TournamentSettingRepo: db.GetTournamentSettingsRepo(),
 	}
 }
 
@@ -136,8 +137,18 @@ func (h *Handler) handleMessage(ctx context.Context, update tgbotapi.Update) {
 // "create_room", "move:e2-e4&roomID:123...", etc. We parse and dispatch logic accordingly.
 func (h *Handler) handleCallback(ctx context.Context, query *tgbotapi.CallbackQuery) {
 	data := query.Data
+	utils.Logger.Info("handleCallback:", zap.Any("query", query))
 
 	switch {
+	case data == config.Cfg.GameShortName:
+		// Формируем URL (можно добавить UTM или initData в query, но initData мы возьмём из WebView)
+		gameURL := config.Cfg.GameURL
+		// Отвечаем Telegram, чтобы открыть WebView
+		//callback := tgbotapi.NewCallbackWithURL(query.ID, gameURL)
+		callback := tgbotapi.NewCallback(query.ID, gameURL)
+		if _, err := h.Bot.Request(callback); err != nil {
+			utils.Logger.Error("AnswerCallbackQuery error:", zap.Error(err))
+		}
 	case data == "tournament_list":
 		h.handleTournamentList(ctx, query)
 
