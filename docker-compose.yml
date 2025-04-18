@@ -10,10 +10,11 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - lvlchess_db
+#      - lvlchess_db
       - lvlchess_redis
       # Uncomment if you plan to use NATS subject streaming
       # - lvlchess_nats
+    network_mode: "host"
     env_file:
       - .env
     volumes:
@@ -33,20 +34,20 @@ services:
     ports:
       - "6379:6379"
 
-  # 3) PostgreSQL for persisting users, rooms, tournaments
-  lvlchess_db:
-    image: postgres:14-alpine
-    container_name: lvlchess_db
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: lvlchess
-    volumes:
-      - ./pg_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+#  # 3) PostgreSQL for persisting users, rooms, tournaments
+#  lvlchess_db:
+#    image: postgres:14-alpine
+#    container_name: lvlchess_db
+#    environment:
+#      POSTGRES_USER: user
+#      POSTGRES_PASSWORD: pass
+#      POSTGRES_DB: lvlchess
+#    volumes:
+#      - ./pg_data:/var/lib/postgresql/data
+#    ports:
+#      - "5432:5432"
 
-  # 4) NATS (JetStream) – optional for microservice/event-driven approaches
+#  # 4) NATS (JetStream) – optional for microservice/event-driven approaches
 #  lvlchess_nats:
 #    image: nats:2.10.11
 #    container_name: lvlchess_nats
@@ -57,7 +58,7 @@ services:
 #      - "4222:4222"
 #      - "8222:8222"
 
-  # (Optional) NATS exporter for Prometheus
+#  # (Optional) NATS exporter for Prometheus
 #  lvlchess_nats_exporter:
 #    image: synadia/nats-prometheus-exporter
 #    container_name: lvlchess_nats_exporter
@@ -79,7 +80,7 @@ services:
     depends_on:
       - lvlchess_go
 
-  # 6) Prometheus – optional for monitoring
+#  # 6) Prometheus – optional for monitoring
 #  lvlchess_prometheus:
 #    image: prom/prometheus:latest
 #    container_name: lvlchess_prometheus
@@ -92,7 +93,7 @@ services:
 #      - lvlchess_nats
 #      - lvlchess_db
 
-  # 7) Grafana – optional for real-time metrics dashboards
+#  # 7) Grafana – optional for real-time metrics dashboards
 #  lvlchess_grafana:
 #    image: grafana/grafana:latest
 #    container_name: lvlchess_grafana
