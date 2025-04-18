@@ -39,7 +39,7 @@ jobs:
             git pull origin master
             # Then re-build & deploy via docker-compose
             docker-compose pull
-            docker-compose build
-            docker-compose up -d
+            docker-compose build lvlchess_go
+            docker-compose up -d lvlchess_go
 
             # done
