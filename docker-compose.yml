@@ -9,9 +9,9 @@ services:
     container_name: lvlchess_go
     ports:
       - "8080:8080"
-    depends_on:
-#      - lvlchess_db
-      - lvlchess_redis
+    # depends_on:
+      # - lvlchess_db
+      # - lvlchess_redis
       # Uncomment if you plan to use NATS subject streaming
       # - lvlchess_nats
     network_mode: "host"
@@ -24,16 +24,16 @@ services:
     # environment:
     #   PG_HOST: "lvlchess_db"
 
-  # 2) Redis in-memory store (optionally used for caching)
-  lvlchess_redis:
-    image: redis:7-alpine
-    container_name: lvlchess_redis
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - ./redis_data:/data
-    ports:
-      - "6379:6379"
-
+#  # 2) Redis in-memory store (optionally used for caching)
+#  lvlchess_redis:
+#    image: redis:7-alpine
+#    container_name: lvlchess_redis
+#    command: ["redis-server", "--appendonly", "yes"]
+#    volumes:
+#      - ./redis_data:/data
+#    ports:
+#      - "6379:6379"
+#
 #  # 3) PostgreSQL for persisting users, rooms, tournaments
 #  lvlchess_db:
 #    image: postgres:14-alpine
@@ -46,7 +46,7 @@ services:
 #      - ./pg_data:/var/lib/postgresql/data
 #    ports:
 #      - "5432:5432"
-
+#
 #  # 4) NATS (JetStream) – optional for microservice/event-driven approaches
 #  lvlchess_nats:
 #    image: nats:2.10.11
@@ -57,7 +57,7 @@ services:
 #    ports:
 #      - "4222:4222"
 #      - "8222:8222"
-
+#
 #  # (Optional) NATS exporter for Prometheus
 #  lvlchess_nats_exporter:
 #    image: synadia/nats-prometheus-exporter
@@ -92,7 +92,7 @@ services:
 #      - lvlchess_go
 #      - lvlchess_nats
 #      - lvlchess_db
-
+#
 #  # 7) Grafana – optional for real-time metrics dashboards
 #  lvlchess_grafana:
 #    image: grafana/grafana:latest
