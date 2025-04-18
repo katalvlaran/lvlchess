@@ -107,14 +107,14 @@ func LoadConfig() error {
 	}
 
 	if err := Cfg.PGConfig.Validate(); err != nil {
-		return fmt.Errorf("nats config invalid: %w", err)
+		return fmt.Errorf("PGConfig config invalid: %w", err)
 	}
 	if err := Cfg.TelegramConfig.Validate(); err != nil {
-		return fmt.Errorf("crypto config invalid: %w", err)
+		return fmt.Errorf("TelegramConfig config invalid: %w", err)
 	}
-	//if err := Cfg.Validate(); err != nil {
-	//	return fmt.Errorf("top-level config invalid: %w", err)
-	//}
+	if err := Cfg.Validate(); err != nil {
+		return fmt.Errorf("top-level config invalid: %w", err)
+	}
 
 	return nil
 }

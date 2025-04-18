@@ -93,20 +93,6 @@ func GetTournamentSettingsRepo() *repositories.TournamentSettingsRepository {
 }
 
 /*
-Kline is an example structure (maybe unused here).
-You can remove or rename it if it doesn't apply to your project.
-*/
-type Kline struct {
-	OpenTime  int64   `json:"openTime"`
-	Open      float64 `json:"open"`
-	High      float64 `json:"high"`
-	Low       float64 `json:"low"`
-	Close     float64 `json:"close"`
-	Volume    float64 `json:"volume"`
-	CloseTime int64   `json:"closeTime"`
-}
-
-/*
 initSchema():
 
 	Simple "migration" approach.
@@ -116,18 +102,16 @@ initSchema():
 func initSchema() {
 	schemaUsers := `
 	CREATE TABLE IF NOT EXISTS users (
-		id BIGINT UNIQUE,
-		OpenTime BIGINT,
-		Open FLOAT,
-		High FLOAT,
-	    Low FLOAT,
-		Close FLOAT,
-		Volume FLOAT,
-		CloseTime INT
-	);
-	`
-	_, err := Pool.Exec(context.Background(), schemaUsers)
-	if err != nil {
+		id        BIGINT UNIQUE,
+		user_name  VARCHAR(255),
+		first_name VARCHAR(255),
+		chat_id   BIGINT DEFAULT(0),
+	    current_room VARCHAR(36) NULL,
+		rating    INT DEFAULT 1000,
+		wins      INT DEFAULT 0,
+		total_games INT DEFAULT 0
+	);`
+	if _, err := Pool.Exec(context.Background(), schemaUsers); err != nil {
 		utils.Logger.Error("Error creating users table", zap.Error(err))
 	}
 
@@ -153,8 +137,7 @@ func initSchema() {
 	ALTER TABLE users ADD CONSTRAINT fk_curr_room 
 	    FOREIGN KEY(current_room) REFERENCES rooms(room_id);
 	`
-	_, err = Pool.Exec(context.Background(), schemaRooms)
-	if err != nil {
+	if _, err := Pool.Exec(context.Background(), schemaRooms); err != nil {
 		utils.Logger.Error("Error creating rooms table", zap.Error(err))
 	}
 
@@ -170,8 +153,7 @@ func initSchema() {
 	  updated_at  TIMESTAMP DEFAULT NOW()
 	);
 	`
-	_, err = Pool.Exec(context.Background(), schemaTournaments)
-	if err != nil {
+	if _, err := Pool.Exec(context.Background(), schemaTournaments); err != nil {
 		utils.Logger.Error("Error creating tournaments table", zap.Error(err))
 	}
 
@@ -181,12 +163,11 @@ func initSchema() {
 	  r_id   VARCHAR(36) NOT NULL,
 	  rank   INT DEFAULT 0,
 	  status INT DEFAULT 0,
-	  CONSTRAINT fk_tournament FOREIGN KEY (t_id) REFERENCES tournaments (id),
-	  CONSTRAINT fk_room       FOREIGN KEY (r_id) REFERENCES rooms (room_id)
+	  CONSTRAINT fk_tournament FOREIGN KEY (t_id) REFERENCES tournaments(id),
+	  CONSTRAINT fk_room       FOREIGN KEY (r_id) REFERENCES rooms(room_id)
 	);
 	`
-	_, err = Pool.Exec(context.Background(), schemaTournamentSettings)
-	if err != nil {
+	if _, err := Pool.Exec(context.Background(), schemaTournamentSettings); err != nil {
 		utils.Logger.Error("Error creating tournament_settings table", zap.Error(err))
 	}
 }
