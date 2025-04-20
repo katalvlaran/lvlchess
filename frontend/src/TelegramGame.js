@@ -1,5 +1,9 @@
 // lvlchess/frontend/src/TelegramGame.js
 import React, { useEffect, useState } from 'react';
+import ChessGame from './ChessGame';
+
+
+
 
 export default function TelegramGame() {
     const [user, setUser] = useState(null);
@@ -46,11 +50,19 @@ export default function TelegramGame() {
         return <div style={{ padding: 20 }}>Проверка Telegram initData…</div>;
     }
 
+    // Коллбэк: каждый ход шлём bot’у через Telegram.WebApp.sendData
+    const handleMove = move => {
+        window.Telegram.WebApp.sendData(JSON.stringify({
+            type: 'move',
+            from: move.from,
+            to:   move.to,
+            promotion: move.promotion
+        }));
+    };
     return (
         <div style={{ padding: 20 }}>
             <h2>Добро пожаловать, {user.username || user.id}</h2>
-            <p>Ваш Telegram ID: {user.id}</p>
-            {/* дальше рендерим шахматную доску, кнопки и т. д. */}
+            <ChessGame onMove={handleMove} />
         </div>
     );
 }

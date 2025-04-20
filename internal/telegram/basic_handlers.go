@@ -48,7 +48,12 @@ func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update
 	btnMyTournaments := tgbotapi.NewInlineKeyboardButtonData("📃 Мои турниры", "tournament_list")
 	btnPlayBot := tgbotapi.NewInlineKeyboardButtonData("🤖 Играть с ботом", PlayWithBot)
 	btnSetupRoom := tgbotapi.NewInlineKeyboardButtonData("⚙️ Создать и настроить комнату", SetupRoom)
-	btnPlayGame := tgbotapi.NewInlineKeyboardButtonData("▶️ Играть в lvlChess", config.Cfg.GameShortName)
+	//btnPlayGame := tgbotapi.NewInlineKeyboardButtonData("▶️ Играть в lvlChess", config.Cfg.GameShortName)
+	btnPlayGame := tgbotapi.InlineKeyboardButton{
+		Text:         "▶️ Играть в lvlChess",
+		CallbackGame: &tgbotapi.CallbackGame{},
+		CallbackData: &config.Cfg.GameShortName,
+	}
 
 	utils.Logger.Info("handleStartCommand", zap.String("GameShortName", config.Cfg.GameShortName))
 
@@ -65,16 +70,6 @@ func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update
 	msg.ReplyMarkup = keyboard
 	h.Bot.Send(msg)
 }
-
-//func newInlineKeyboardButtonGame(text, gameShortName string) tgbotapi.InlineQueryResultGame {
-//	//func newInlineKeyboardButtonGame(text, data string) tgbotapi.InlineKeyboardButton {
-//	return tgbotapi.InlineQueryResultGame{
-//		Type: "game",
-//
-//		GameShortName: gameShortName,
-//		CallbackGame:  &tgbotapi.CallbackGame{},
-//	}
-//}
 
 // handlePlayWithBotCommand is a placeholder for a future feature: playing vs an AI or local engine.
 // Currently, we simply send a message "In development."
