@@ -141,11 +141,10 @@ func (h *Handler) handleCallback(ctx context.Context, query *tgbotapi.CallbackQu
 
 	switch {
 	case data == config.Cfg.GameShortName:
-		// Формируем URL (можно добавить UTM или initData в query, но initData мы возьмём из WebView)
-		gameURL := config.Cfg.GameURL
 		// Отвечаем Telegram, чтобы открыть WebView
 		//callback := tgbotapi.NewCallbackWithURL(query.ID, gameURL)
-		callback := tgbotapi.NewCallback(query.ID, gameURL)
+		callback := tgbotapi.NewCallback(query.ID, "Opening lvlChess")
+		callback.URL = config.Cfg.GameURL
 		if _, err := h.Bot.Request(callback); err != nil {
 			utils.Logger.Error("AnswerCallbackQuery error:", zap.Error(err))
 		}
