@@ -48,12 +48,9 @@ func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update
 	btnMyTournaments := tgbotapi.NewInlineKeyboardButtonData("📃 Мои турниры", "tournament_list")
 	btnPlayBot := tgbotapi.NewInlineKeyboardButtonData("🤖 Играть с ботом", PlayWithBot)
 	btnSetupRoom := tgbotapi.NewInlineKeyboardButtonData("⚙️ Создать и настроить комнату", SetupRoom)
-	//btnPlayGame := tgbotapi.NewInlineKeyboardButtonData("▶️ Играть в lvlChess", config.Cfg.GameShortName)
-	btnPlayGame := tgbotapi.InlineKeyboardButton{
-		Text:         "▶️ Играть в lvlChess",
-		CallbackGame: &tgbotapi.CallbackGame{},
-		CallbackData: &config.Cfg.GameShortName,
-	}
+
+	btnPlayGame := tgbotapi.NewInlineKeyboardButtonData("▶️ Играть в lvlChess", config.Cfg.GameShortName)
+	// btnPlayGame := tgbotapi.InlineKeyboardButton{Text: "▶️ Играть в lvlChess",CallbackGame: &tgbotapi.CallbackGame{},CallbackData: &config.Cfg.GameShortName}
 
 	utils.Logger.Info("handleStartCommand", zap.String("GameShortName", config.Cfg.GameShortName))
 

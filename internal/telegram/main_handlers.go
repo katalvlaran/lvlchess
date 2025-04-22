@@ -143,9 +143,14 @@ func (h *Handler) handleCallback(ctx context.Context, query *tgbotapi.CallbackQu
 	case data == config.Cfg.GameShortName:
 		// Отвечаем Telegram, чтобы открыть WebView
 		//callback := tgbotapi.NewCallbackWithURL(query.ID, gameURL)
-		callback := tgbotapi.NewCallback(query.ID, "Opening lvlChess")
-		callback.URL = config.Cfg.GameURL
-		if _, err := h.Bot.Request(callback); err != nil {
+		//callback := tgbotapi.NewCallback(query.ID, "Opening lvlChess")
+		//callback.URL = config.Cfg.GameURL
+		//if _, err := h.Bot.Request(callback); err != nil {
+		//	utils.Logger.Error("AnswerCallbackQuery error:", zap.Error(err))
+		//}
+
+		cfg := tgbotapi.CallbackConfig{CallbackQueryID: query.ID, URL: config.Cfg.GameURL, Text: "Opening lvlChess"}
+		if _, err := h.Bot.Request(cfg); err != nil {
 			utils.Logger.Error("AnswerCallbackQuery error:", zap.Error(err))
 		}
 	case data == "tournament_list":
