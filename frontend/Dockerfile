@@ -30,6 +30,9 @@ FROM nginx:alpine
 # Copy the build artifacts from stage 'build' to the NGINX html folder
 COPY --from=build /app/build /usr/share/nginx/html
 
+# copy your config instead of the default one
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+
 # Expose port 80 so we can map it (see docker-compose)
 EXPOSE 80
 
