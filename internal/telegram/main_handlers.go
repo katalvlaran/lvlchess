@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"lvlchess/config"
 	"lvlchess/internal/db"
 	"lvlchess/internal/db/models"
 	"lvlchess/internal/db/repositories"
@@ -140,19 +139,22 @@ func (h *Handler) handleCallback(ctx context.Context, query *tgbotapi.CallbackQu
 	utils.Logger.Info("handleCallback:", zap.Any("query", query))
 
 	switch {
-	case data == config.Cfg.GameShortName:
-		// Отвечаем Telegram, чтобы открыть WebView
-		//callback := tgbotapi.NewCallbackWithURL(query.ID, gameURL)
-		//callback := tgbotapi.NewCallback(query.ID, "Opening lvlChess")
-		//callback.URL = config.Cfg.GameURL
-		//if _, err := h.Bot.Request(callback); err != nil {
-		//	utils.Logger.Error("AnswerCallbackQuery error:", zap.Error(err))
-		//}
+	/*
+		case data == config.Cfg.GameShortName:
+			// Отвечаем Telegram, чтобы открыть WebView
 
-		cfg := tgbotapi.CallbackConfig{CallbackQueryID: query.ID, URL: config.Cfg.GameURL, Text: "Opening lvlChess"}
-		if _, err := h.Bot.Request(cfg); err != nil {
-			utils.Logger.Error("AnswerCallbackQuery error:", zap.Error(err))
-		}
+			//callback := tgbotapi.NewCallbackWithURL(query.ID, gameURL)
+			//callback := tgbotapi.NewCallback(query.ID, "Opening lvlChess")
+			//callback.URL = config.Cfg.GameURL
+			//if _, err := h.Bot.Request(callback); err != nil {
+			//	utils.Logger.Error("AnswerCallbackQuery error:", zap.Error(err))
+			//}
+
+			//cfg := tgbotapi.CallbackConfig{CallbackQueryID: query.ID, URL: config.Cfg.GameURL, Text: "Opening lvlChess"}
+			//if _, err := h.Bot.Request(cfg); err != nil {
+			//	utils.Logger.Error("AnswerCallbackQuery error:", zap.Error(err))
+			//}
+	*/
 	case data == "tournament_list":
 		h.handleTournamentList(ctx, query)
 
