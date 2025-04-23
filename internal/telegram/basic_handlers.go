@@ -5,13 +5,10 @@ import (
 	"fmt"
 
 	"lvlchess/config"
-	"lvlchess/internal/utils"
-
 	// "lvlchess/internal/db" could be used if we needed direct db access here, but we rely on repos in Handler
 	"lvlchess/internal/db/models"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"go.uber.org/zap"
 )
 
 // handleStartCommand is invoked when a user sends the /start command in private chat.
@@ -49,10 +46,7 @@ func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update
 	btnPlayBot := tgbotapi.NewInlineKeyboardButtonData("🤖 Играть с ботом", PlayWithBot)
 	btnSetupRoom := tgbotapi.NewInlineKeyboardButtonData("⚙️ Создать и настроить комнату", SetupRoom)
 
-	btnPlayGame := tgbotapi.NewInlineKeyboardButtonData("▶️ Играть в lvlChess", config.Cfg.GameShortName)
-	// btnPlayGame := tgbotapi.InlineKeyboardButton{Text: "▶️ Играть в lvlChess",CallbackGame: &tgbotapi.CallbackGame{},CallbackData: &config.Cfg.GameShortName}
-
-	utils.Logger.Info("handleStartCommand", zap.String("GameShortName", config.Cfg.GameShortName))
+	btnPlayGame := tgbotapi.NewInlineKeyboardButtonWebApp("▶️ Играть в lvlChess", tgbotapi.WebAppInfo{config.Cfg.GameURL})
 
 	// You can arrange these buttons in multiple rows as below.
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
@@ -70,7 +64,7 @@ func (h *Handler) handleStartCommand(ctx context.Context, update tgbotapi.Update
 
 // handlePlayWithBotCommand is a placeholder for a future feature: playing vs an AI or local engine.
 // Currently, we simply send a message "In development."
-func (h *Handler) handlePlayWithBotCommand(ctx context.Context, query *tgbotapi.CallbackQuery) {
+func (h *Handler) handlePlayWithBotCommand(_ context.Context, query *tgbotapi.CallbackQuery) {
 	msg := tgbotapi.NewMessage(query.Message.Chat.ID, "Игра с ботом в разработке.")
 	h.Bot.Send(msg)
 }

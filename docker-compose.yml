@@ -76,7 +76,7 @@ services:
       dockerfile: Dockerfile
     container_name: lvlchess_front
     ports:
-      - "80:80"
+      - "127.0.0.1:8081:80"
     depends_on:
       - lvlchess_go
 
